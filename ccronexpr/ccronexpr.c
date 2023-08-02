@@ -15,7 +15,7 @@
  */
 
 /* 
- * File:   CronExprParser.cpp
+ * File:   ccronexpr.c
  * Author: alex
  * 
  * Created on February 24, 2015, 9:35 AM
@@ -37,6 +37,7 @@
 #define CRON_MAX_DAYS_OF_WEEK 8
 #define CRON_MAX_DAYS_OF_MONTH 32
 #define CRON_MAX_MONTHS 12
+#define CRON_MAX_YEARS_DIFF 4
 
 #define CRON_CF_SECOND 0
 #define CRON_CF_MINUTE 1
@@ -50,9 +51,9 @@
 
 #define CRON_INVALID_INSTANT ((time_t) -1)
 
-static const char* DAYS_ARR[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+static const char* const DAYS_ARR[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 #define CRON_DAYS_ARR_LEN 7
-static const char* MONTHS_ARR[] = { "FOO", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+static const char* const MONTHS_ARR[] = { "FOO", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
 #define CRON_MONTHS_ARR_LEN 13
 
 #define CRON_MAX_STR_LEN_TO_SPLIT 256
@@ -68,78 +69,129 @@ static const char* MONTHS_ARR[] = { "FOO", "JAN", "FEB", "MAR", "APR", "MAY", "J
                                 (abs(num) < 100000000 ? 8 : \
                                 (abs(num) < 1000000000 ? 9 : 10)))))))))
 
-#ifndef _WIN32
-struct tm *gmtime_r(const time_t *timep, struct tm *result);
-#ifdef CRON_USE_LOCAL_TIME
-struct tm *localtime_r(const time_t *timep, struct tm *result);
-#endif /* CRON_USE_LOCAL_TIME */
-#endif /* _WIN32 */
-
 #ifndef CRON_TEST_MALLOC
-#define cronFree(x) free(x);
-#define cronMalloc(x) malloc(x);
-#else
-void* cronMalloc(size_t n);
-void cronFree(void* p);
-#endif
+#define cron_malloc(x) malloc(x);
+#define cron_free(x) free(x);
+#else /* CRON_TEST_MALLOC */
+void* cron_malloc(size_t n);
+void cron_free(void* p);
+#endif /* CRON_TEST_MALLOC */
 
-/* Defining 'cron_mktime' to use use UTC (default) or local time */
-#ifndef CRON_USE_LOCAL_TIME
+/**
+ * Time functions from standard library.
+ * This part defines: cron_mktime: create time_t from tm
+ *                    cron_time: create tm from time_t
+ */
 
-/* http://stackoverflow.com/a/22557778 */
-#ifdef _WIN32
-time_t cron_mktime(struct tm* tm) {
-    return _mkgmtime(tm);
-}
-#else /* _WIN32 */
-#ifndef ANDROID
+/* forward declarations for platforms that may need them */
 /* can be hidden in time.h */
+#if !defined(_WIN32) && !defined(__AVR__) && !defined(ESP8266) && !defined(ESP_PLATFORM) && !defined(ANDROID) && !defined(TARGET_LIKE_MBED)
+struct tm *gmtime_r(const time_t *timep, struct tm *result);
 time_t timegm(struct tm* __tp);
-#endif /* ANDROID */
-time_t cron_mktime(struct tm* tm) {
-#ifndef ANDROID
-    return timegm(tm);
-#else /* ANDROID */
+struct tm *localtime_r(const time_t *timep, struct tm *result);
+#endif /* PLEASE CHECK _WIN32 AND ANDROID NEEDS FOR THESE DECLARATIONS */
+#ifdef __MINGW32__
+/* To avoid warning when building with mingw */
+time_t _mkgmtime(struct tm* tm);
+#endif /* __MINGW32__ */
+
+/* function definitions */
+time_t cron_mktime_gm(struct tm* tm) {
+#if defined(_WIN32)
+/* http://stackoverflow.com/a/22557778 */
+    return _mkgmtime(tm);
+#elif defined(__AVR__)
+/* https://www.nongnu.org/avr-libc/user-manual/group__avr__time.html */
+    return mk_gmtime(tm);
+#elif defined(ESP8266) || defined(ESP_PLATFORM) || defined(TARGET_LIKE_MBED)
+    /* https://linux.die.net/man/3/timegm */
+    /* http://www.catb.org/esr/time-programming/ */
+    /* portable version of timegm() */
+    time_t ret;
+    char *tz;
+    tz = getenv("TZ");
+    if (tz)
+        tz = strdup(tz);
+    setenv("TZ", "UTC+0", 1);
+    tzset();
+    ret = mktime(tm);
+    if (tz) {
+        setenv("TZ", tz, 1);
+        free(tz);
+    } else
+        unsetenv("TZ");
+    tzset();
+    return ret;
+#elif defined(ANDROID)
     /* https://github.com/adobe/chromium/blob/cfe5bf0b51b1f6b9fe239c2a3c2f2364da9967d7/base/os_compat_android.cc#L20 */
     static const time_t kTimeMax = ~(1L << (sizeof (time_t) * CHAR_BIT - 1));
     static const time_t kTimeMin = (1L << (sizeof (time_t) * CHAR_BIT - 1));
     time64_t result = timegm64(tm);
     if (result < kTimeMin || result > kTimeMax) return -1;
     return result;
-#endif /* ANDROID */
+#else
+    return timegm(tm);
+#endif
 }
-#endif /* _WIN32 */
 
-struct tm* cron_time(time_t* date, struct tm* out) {
-#ifdef __MINGW32__
+struct tm* cron_time_gm(time_t* date, struct tm* out) {
+#if defined(__MINGW32__)
     (void)(out); /* To avoid unused warning */
     return gmtime(date);
-#else /* __MINGW32__ */
-#ifdef _WIN32
+#elif defined(_WIN32)
     errno_t err = gmtime_s(out, date);
     return 0 == err ? out : NULL;
-#else /* _WIN32 */
+#elif defined(__AVR__)
+    /* https://www.nongnu.org/avr-libc/user-manual/group__avr__time.html */
+    gmtime_r(date, out);
+    return out;
+#else
     return gmtime_r(date, out);
-#endif /* _WIN32 */
-#endif /* __MINGW32__ */
+#endif
 }
 
-#else /* CRON_USE_LOCAL_TIME */
-
-time_t cron_mktime(struct tm* tm) {
+time_t cron_mktime_local(struct tm* tm) {
+    tm->tm_isdst = -1;
     return mktime(tm);
 }
 
-struct tm* cron_time(time_t* date, struct tm* out) {
-#ifdef _WIN32
+struct tm* cron_time_local(time_t* date, struct tm* out) {
+#if defined(_WIN32)
     errno_t err = localtime_s(out, date);
     return 0 == err ? out : NULL;
-#else /* _WIN32 */    
+#elif defined(__AVR__)
+    /* https://www.nongnu.org/avr-libc/user-manual/group__avr__time.html */
+    localtime_r(date, out);
+    return out;
+#else
     return localtime_r(date, out);
-#endif /* _WIN32 */    
+#endif
+}
+
+/* Defining 'cron_' time functions to use use UTC (default) or local time */
+#ifndef CRON_USE_LOCAL_TIME
+time_t cron_mktime(struct tm* tm) {
+    return cron_mktime_gm(tm);
+}
+
+struct tm* cron_time(time_t* date, struct tm* out) {
+    return cron_time_gm(date, out);
+}
+
+#else /* CRON_USE_LOCAL_TIME */
+time_t cron_mktime(struct tm* tm) {
+    return cron_mktime_local(tm);
+}
+
+struct tm* cron_time(time_t* date, struct tm* out) {
+    return cron_time_local(date, out);
 }
 
 #endif /* CRON_USE_LOCAL_TIME */
+
+/**
+ * Functions.
+ */
 
 void cron_set_bit(uint8_t* rbyte, int idx) {
     uint8_t j = (uint8_t) (idx / 8);
@@ -171,15 +223,15 @@ static void free_splitted(char** splitted, size_t len) {
     if (!splitted) return;
     for (i = 0; i < len; i++) {
         if (splitted[i]) {
-            cronFree(splitted[i]);
+            cron_free(splitted[i]);
         }
     }
-    cronFree(splitted);
+    cron_free(splitted);
 }
 
 static char* strdupl(const char* str, size_t len) {
     if (!str) return NULL;
-    char* res = (char*) cronMalloc(len + 1);
+    char* res = (char*) cron_malloc(len + 1);
     if (!res) return NULL;
     memset(res, 0, len + 1);
     memcpy(res, str, len);
@@ -252,7 +304,7 @@ static int add_to_field(struct tm* calendar, int field, int val) {
 /**
  * Reset the calendar setting all the fields provided to zero.
  */
-static int reset(struct tm* calendar, int field) {
+static int reset_min(struct tm* calendar, int field) {
     if (!calendar || -1 == field) {
         return 1;
     }
@@ -288,7 +340,7 @@ static int reset(struct tm* calendar, int field) {
     return 0;
 }
 
-static int reset_all(struct tm* calendar, int* fields) {
+static int reset_all_min(struct tm* calendar, int* fields) {
     int i;
     int res = 0;
     if (!calendar || !fields) {
@@ -296,7 +348,7 @@ static int reset_all(struct tm* calendar, int* fields) {
     }
     for (i = 0; i < CRON_CF_ARR_LEN; i++) {
         if (-1 != fields[i]) {
-            res = reset(calendar, fields[i]);
+            res = reset_min(calendar, fields[i]);
             if (0 != res) return res;
         }
     }
@@ -351,7 +403,7 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
     if (notfound) {
         err = add_to_field(calendar, nextField, 1);
         if (err) goto return_error;
-        err = reset(calendar, field);
+        err = reset_min(calendar, field);
         if (err) goto return_error;
         notfound = 0;
         next_value = next_set_bit(bits, max, 0, &notfound);
@@ -359,7 +411,7 @@ static unsigned int find_next(uint8_t* bits, unsigned int max, unsigned int valu
     if (notfound || next_value != value) {
         err = set_field(calendar, field, next_value);
         if (err) goto return_error;
-        err = reset_all(calendar, lower_orders);
+        err = reset_all_min(calendar, lower_orders);
         if (err) goto return_error;
     }
     return next_value;
@@ -379,7 +431,7 @@ static unsigned int find_next_day(struct tm* calendar, uint8_t* days_of_month, u
         if (err) goto return_error;
         day_of_month = calendar->tm_mday;
         day_of_week = calendar->tm_wday;
-        reset_all(calendar, resets);
+        reset_all_min(calendar, resets);
     }
     return day_of_month;
 
@@ -405,9 +457,9 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
     unsigned int month = 0;
     unsigned int update_month = 0;
 
-    resets = (int*) cronMalloc(CRON_CF_ARR_LEN * sizeof(int));
+    resets = (int*) cron_malloc(CRON_CF_ARR_LEN * sizeof(int));
     if (!resets) goto return_result;
-    empty_list = (int*) cronMalloc(CRON_CF_ARR_LEN * sizeof(int));
+    empty_list = (int*) cron_malloc(CRON_CF_ARR_LEN * sizeof(int));
     if (!empty_list) goto return_result;
     for (i = 0; i < CRON_CF_ARR_LEN; i++) {
         resets[i] = -1;
@@ -470,10 +522,10 @@ static int do_next(cron_expr* expr, struct tm* calendar, unsigned int dot) {
         res = -1;
     }
     if (resets) {
-        cronFree(resets);
+        cron_free(resets);
     }
     if (empty_list) {
-        cronFree(empty_list);
+        cron_free(empty_list);
     }
     return res;
 }
@@ -482,17 +534,21 @@ static int to_upper(char* str) {
     if (!str) return 1;
     int i;
     for (i = 0; '\0' != str[i]; i++) {
-        str[i] = (char) toupper(str[i]);
+        int c = (int)str[i];
+        str[i] = (char) toupper(c);
     }
     return 0;
 }
 
 static char* to_string(int num) {
     if (abs(num) >= CRON_MAX_NUM_TO_SRING) return NULL;
-    char* str = (char*) cronMalloc(CRON_NUM_OF_DIGITS(num) + 1);
+    char* str = (char*) cron_malloc(CRON_NUM_OF_DIGITS(num) + 1);
     if (!str) return NULL;
     int res = sprintf(str, "%d", num);
-    if (res < 0) return NULL;
+    if (res < 0) {
+        cron_free(str);
+        return NULL;
+    }
     return str;
 }
 
@@ -521,7 +577,7 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
      ins points to the next occurrence of rep in orig
      orig points to the remainder of orig after "end of rep"
      */
-    tmp = result = (char*) cronMalloc(strlen(orig) + (len_with - len_rep) * count + 1);
+    tmp = result = (char*) cron_malloc(strlen(orig) + (len_with - len_rep) * count + 1);
     if (!result) return NULL;
 
     while (count--) {
@@ -538,7 +594,7 @@ static char* str_replace(char *orig, const char *rep, const char *with) {
 static unsigned int parse_uint(const char* str, int* errcode) {
     char* endptr;
     errno = 0;
-    long int l = strtol(str, &endptr, 0);
+    long int l = strtol(str, &endptr, 10);
     if (errno == ERANGE || *endptr != '\0' || l < 0 || l > INT_MAX) {
         *errcode = 1;
         return 0;
@@ -564,14 +620,15 @@ static char** split_str(const char* str, char del, size_t* len_out) {
         stlen += 1;
         if (stlen >= CRON_MAX_STR_LEN_TO_SPLIT) goto return_error;
     }
-
+    
     for (i = 0; i < stlen; i++) {
+        int c = str[i];
         if (del == str[i]) {
             if (accum > 0) {
                 len += 1;
                 accum = 0;
             }
-        } else if (!isspace(str[i])) {
+        } else if (!isspace(c)) {
             accum += 1;
         }
     }
@@ -581,14 +638,15 @@ static char** split_str(const char* str, char del, size_t* len_out) {
     }
     if (0 == len) return NULL;
 
-    buf = (char*) cronMalloc(stlen + 1);
+    buf = (char*) cron_malloc(stlen + 1);
     if (!buf) goto return_error;
     memset(buf, 0, stlen + 1);
-    res = (char**) cronMalloc(len * sizeof(char*));
+    res = (char**) cron_malloc(len * sizeof(char*));
     if (!res) goto return_error;
     memset(res, 0, len * sizeof(char*));
 
     for (i = 0; i < stlen; i++) {
+        int c = str[i];
         if (del == str[i]) {
             if (bi > 0) {
                 tmp = strdupl(buf, bi);
@@ -597,7 +655,7 @@ static char** split_str(const char* str, char del, size_t* len_out) {
                 memset(buf, 0, stlen + 1);
                 bi = 0;
             }
-        } else if (!isspace(str[i])) {
+        } else if (!isspace(c)) {
             buf[bi++] = str[i];
         }
     }
@@ -607,20 +665,20 @@ static char** split_str(const char* str, char del, size_t* len_out) {
         if (!tmp) goto return_error;
         res[ri++] = tmp;
     }
-    cronFree(buf);
+    cron_free(buf);
     *len_out = len;
     return res;
 
     return_error:
     if (buf) {
-        cronFree(buf);
+        cron_free(buf);
     }
     free_splitted(res, len);
     *len_out = 0;
     return NULL;
 }
 
-static char* replace_ordinals(char* value, const char** arr, size_t arr_len) {
+static char* replace_ordinals(char* value, const char* const * arr, size_t arr_len) {
     size_t i;
     char* cur = value;
     char* res = NULL;
@@ -629,14 +687,14 @@ static char* replace_ordinals(char* value, const char** arr, size_t arr_len) {
         char* strnum = to_string((int) i);
         if (!strnum) {
             if (!first) {
-                cronFree(cur);
+                cron_free(cur);
             }
             return NULL;
         }
         res = str_replace(cur, arr[i], strnum);
-        cronFree(strnum);
+        cron_free(strnum);
         if (!first) {
-            cronFree(cur);
+            cron_free(cur);
         }
         if (!res) {
             return NULL;
@@ -664,7 +722,7 @@ static unsigned int* get_range(char* field, unsigned int min, unsigned int max, 
 
     char** parts = NULL;
     size_t len = 0;
-    unsigned int* res = (unsigned int*) cronMalloc(2 * sizeof(unsigned int));
+    unsigned int* res = (unsigned int*) cron_malloc(2 * sizeof(unsigned int));
     if (!res) goto return_error;
 
     res[0] = 0;
@@ -720,13 +778,13 @@ static unsigned int* get_range(char* field, unsigned int min, unsigned int max, 
     return_error:
     free_splitted(parts, len);
     if (res) {
-        cronFree(res);
+        cron_free(res);
     }
 
     return NULL;
 }
 
-void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsigned int max, const char** error) {
+static void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsigned int max, const char** error) {
     size_t i;
     unsigned int i1;
     size_t len = 0;
@@ -745,7 +803,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 
             if (*error) {
                 if (range) {
-                    cronFree(range);
+                    cron_free(range);
                 }
                 goto return_result;
 
@@ -755,7 +813,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
                 cron_set_bit(target, i1);
 
             }
-            cronFree(range);
+            cron_free(range);
 
         } else {
             size_t len2 = 0;
@@ -768,7 +826,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
             unsigned int* range = get_range(split[0], min, max, error);
             if (*error) {
                 if (range) {
-                    cronFree(range);
+                    cron_free(range);
                 }
                 free_splitted(split, len2);
                 goto return_result;
@@ -780,13 +838,13 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
             unsigned int delta = parse_uint(split[1], &err);
             if (err) {
                 *error = "Unsigned integer parse error 4";
-                cronFree(range);
+                cron_free(range);
                 free_splitted(split, len2);
                 goto return_result;
             }
             if (0 == delta) {
                 *error = "Incrementer may not be zero";
-                cronFree(range);
+                cron_free(range);
                 free_splitted(split, len2);
                 goto return_result;
             }
@@ -794,7 +852,7 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
                 cron_set_bit(target, i1);
             }
             free_splitted(split, len2);
-            cronFree(range);
+            cron_free(range);
 
         }
     }
@@ -806,19 +864,19 @@ void set_number_hits(const char* value, uint8_t* target, unsigned int min, unsig
 }
 
 static void set_months(char* value, uint8_t* targ, const char** error) {
-    int err;
     unsigned int i;
     unsigned int max = 12;
 
     char* replaced = NULL;
 
-    err = to_upper(value);
-    if (err) return;
+    to_upper(value);
     replaced = replace_ordinals(value, MONTHS_ARR, CRON_MONTHS_ARR_LEN);
-    if (!replaced) return;
-
+    if (!replaced) {
+        *error = "Invalid month format";
+        return;
+    }
     set_number_hits(replaced, targ, 1, max + 1, error);
-    cronFree(replaced);
+    cron_free(replaced);
 
     /* ... and then rotate it to the front of the months */
     for (i = 1; i <= max; i++) {
@@ -829,11 +887,26 @@ static void set_months(char* value, uint8_t* targ, const char** error) {
     }
 }
 
-static void set_days(char* field, uint8_t* targ, int max, const char** error) {
+static void set_days_of_week(char* field, uint8_t* targ, const char** error) {
+    unsigned int max = 7;
+    char* replaced = NULL;
+
     if (1 == strlen(field) && '?' == field[0]) {
         field[0] = '*';
     }
-    set_number_hits(field, targ, 0, max, error);
+    to_upper(field);
+    replaced = replace_ordinals(field, DAYS_ARR, CRON_DAYS_ARR_LEN);
+    if (!replaced) {
+        *error = "Invalid day format";
+        return;
+    }
+    set_number_hits(replaced, targ, 0, max + 1, error);
+    cron_free(replaced);
+    if (cron_get_bit(targ, 7)) {
+        /* Sunday can be represented as 0 or 7*/
+        cron_set_bit(targ, 0);
+        cron_del_bit(targ, 7);
+    }
 }
 
 static void set_days_of_month(char* field, uint8_t* targ, const char** error) {
@@ -848,7 +921,6 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
     const char* err_local;
     size_t len = 0;
     char** fields = NULL;
-    char* days_replaced = NULL;
     if (!error) {
         error = &err_local;
     }
@@ -857,31 +929,28 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
         *error = "Invalid NULL expression";
         goto return_res;
     }
+    if (!target) {
+        *error = "Invalid NULL target";
+        goto return_res;
+    }
 
     fields = split_str(expression, ' ', &len);
     if (len != 6) {
         *error = "Invalid number of fields, expression must consist of 6 fields";
         goto return_res;
     }
+    memset(target, 0, sizeof(*target));
     set_number_hits(fields[0], target->seconds, 0, 60, error);
     if (*error) goto return_res;
     set_number_hits(fields[1], target->minutes, 0, 60, error);
     if (*error) goto return_res;
     set_number_hits(fields[2], target->hours, 0, 24, error);
     if (*error) goto return_res;
-    to_upper(fields[5]);
-    days_replaced = replace_ordinals(fields[5], DAYS_ARR, CRON_DAYS_ARR_LEN);
-    set_days(days_replaced, target->days_of_week, 8, error);
-    cronFree(days_replaced);
-    if (*error) goto return_res;
-    if (cron_get_bit(target->days_of_week, 7)) {
-        /* Sunday can be represented as 0 or 7*/
-        cron_set_bit(target->days_of_week, 0);
-        cron_del_bit(target->days_of_week, 7);
-    }
     set_days_of_month(fields[3], target->days_of_month, error);
     if (*error) goto return_res;
     set_months(fields[4], target->months, error);
+    if (*error) goto return_res;
+    set_days_of_week(fields[5], target->days_of_week, error);
     if (*error) goto return_res;
 
     goto return_res;
@@ -933,3 +1002,271 @@ time_t cron_next(cron_expr* expr, time_t date) {
     return cron_mktime(calendar);
 }
 
+
+/* https://github.com/staticlibs/ccronexpr/pull/8 */
+
+static unsigned int prev_set_bit(uint8_t* bits, int from_index, int to_index, int* notfound) {
+    int i;
+    if (!bits) {
+        *notfound = 1;
+        return 0;
+    }
+    for (i = from_index; i >= to_index; i--) {
+        if (cron_get_bit(bits, i)) return i;
+    }
+    *notfound = 1;
+    return 0;
+}
+
+static int last_day_of_month(int month, int year) {
+    struct tm cal;
+    time_t t;
+    memset(&cal,0,sizeof(cal));
+    cal.tm_sec=0;
+    cal.tm_min=0;
+    cal.tm_hour=0;
+    cal.tm_mon = month+1;
+    cal.tm_mday = 0;
+    cal.tm_year=year;
+    t=mktime(&cal);
+    return gmtime(&t)->tm_mday;
+}
+
+/**
+ * Reset the calendar setting all the fields provided to zero.
+ */
+static int reset_max(struct tm* calendar, int field) {
+    if (!calendar || -1 == field) {
+        return 1;
+    }
+    switch (field) {
+    case CRON_CF_SECOND:
+        calendar->tm_sec = 59;
+        break;
+    case CRON_CF_MINUTE:
+        calendar->tm_min = 59;
+        break;
+    case CRON_CF_HOUR_OF_DAY:
+        calendar->tm_hour = 23;
+        break;
+    case CRON_CF_DAY_OF_WEEK:
+        calendar->tm_wday = 6;
+        break;
+    case CRON_CF_DAY_OF_MONTH:
+        calendar->tm_mday = last_day_of_month(calendar->tm_mon, calendar->tm_year);
+        break;
+    case CRON_CF_MONTH:
+        calendar->tm_mon = 11;
+        break;
+    case CRON_CF_YEAR:
+        /* I don't think this is supposed to happen ... */
+        fprintf(stderr, "reset CRON_CF_YEAR\n");
+        break;
+    default:
+        return 1; /* unknown field */
+    }
+    time_t res = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == res) {
+        return 1;
+    }
+    return 0;
+}
+
+static int reset_all_max(struct tm* calendar, int* fields) {
+    int i;
+    int res = 0;
+    if (!calendar || !fields) {
+        return 1;
+    }
+    for (i = 0; i < CRON_CF_ARR_LEN; i++) {
+        if (-1 != fields[i]) {
+            res = reset_max(calendar, fields[i]);
+            if (0 != res) return res;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Search the bits provided for the next set bit after the value provided,
+ * and reset the calendar.
+ */
+static unsigned int find_prev(uint8_t* bits, unsigned int max, unsigned int value, struct tm* calendar, unsigned int field, unsigned int nextField, int* lower_orders, int* res_out) {
+    int notfound = 0;
+    int err = 0;
+    unsigned int next_value = prev_set_bit(bits, value, 0, &notfound);
+    /* roll under if needed */
+    if (notfound) {
+        err = add_to_field(calendar, nextField, -1);
+        if (err) goto return_error;
+        err = reset_max(calendar, field);
+        if (err) goto return_error;
+        notfound = 0;
+        next_value = prev_set_bit(bits, max - 1, value, &notfound);
+    }
+    if (notfound || next_value != value) {
+        err = set_field(calendar, field, next_value);
+        if (err) goto return_error;
+        err = reset_all_max(calendar, lower_orders);
+        if (err) goto return_error;
+    }
+    return next_value;
+
+    return_error:
+    *res_out = 1;
+    return 0;
+}
+
+static unsigned int find_prev_day(struct tm* calendar, uint8_t* days_of_month, unsigned int day_of_month, uint8_t* days_of_week, unsigned int day_of_week, int* resets, int* res_out) {
+    int err;
+    unsigned int count = 0;
+    unsigned int max = 366;
+    while ((!cron_get_bit(days_of_month, day_of_month) || !cron_get_bit(days_of_week, day_of_week)) && count++ < max) {
+        err = add_to_field(calendar, CRON_CF_DAY_OF_MONTH, -1);
+
+        if (err) goto return_error;
+        day_of_month = calendar->tm_mday;
+        day_of_week = calendar->tm_wday;
+        reset_all_max(calendar, resets);
+    }
+    return day_of_month;
+
+    return_error:
+    *res_out = 1;
+    return 0;
+}
+
+static int do_prev(cron_expr* expr, struct tm* calendar, unsigned int dot) {
+    int i;
+    int res = 0;
+    int* resets = NULL;
+    int* empty_list = NULL;
+    unsigned int second = 0;
+    unsigned int update_second = 0;
+    unsigned int minute = 0;
+    unsigned int update_minute = 0;
+    unsigned int hour = 0;
+    unsigned int update_hour = 0;
+    unsigned int day_of_week = 0;
+    unsigned int day_of_month = 0;
+    unsigned int update_day_of_month = 0;
+    unsigned int month = 0;
+    unsigned int update_month = 0;
+
+    resets = (int*) cron_malloc(CRON_CF_ARR_LEN * sizeof(int));
+    if (!resets) goto return_result;
+    empty_list = (int*) cron_malloc(CRON_CF_ARR_LEN * sizeof(int));
+    if (!empty_list) goto return_result;
+    for (i = 0; i < CRON_CF_ARR_LEN; i++) {
+        resets[i] = -1;
+        empty_list[i] = -1;
+    }
+
+    second = calendar->tm_sec;
+    update_second = find_prev(expr->seconds, CRON_MAX_SECONDS, second, calendar, CRON_CF_SECOND, CRON_CF_MINUTE, empty_list, &res);
+    if (0 != res) goto return_result;
+    if (second == update_second) {
+        push_to_fields_arr(resets, CRON_CF_SECOND);
+    }
+
+    minute = calendar->tm_min;
+    update_minute = find_prev(expr->minutes, CRON_MAX_MINUTES, minute, calendar, CRON_CF_MINUTE, CRON_CF_HOUR_OF_DAY, resets, &res);
+    if (0 != res) goto return_result;
+    if (minute == update_minute) {
+        push_to_fields_arr(resets, CRON_CF_MINUTE);
+    } else {
+        res = do_prev(expr, calendar, dot);
+        if (0 != res) goto return_result;
+    }
+
+    hour = calendar->tm_hour;
+    update_hour = find_prev(expr->hours, CRON_MAX_HOURS, hour, calendar, CRON_CF_HOUR_OF_DAY, CRON_CF_DAY_OF_WEEK, resets, &res);
+    if (0 != res) goto return_result;
+    if (hour == update_hour) {
+        push_to_fields_arr(resets, CRON_CF_HOUR_OF_DAY);
+    } else {
+        res = do_prev(expr, calendar, dot);
+        if (0 != res) goto return_result;
+    }
+
+    day_of_week = calendar->tm_wday;
+    day_of_month = calendar->tm_mday;
+    update_day_of_month = find_prev_day(calendar, expr->days_of_month, day_of_month, expr->days_of_week, day_of_week, resets, &res);
+    if (0 != res) goto return_result;
+    if (day_of_month == update_day_of_month) {
+        push_to_fields_arr(resets, CRON_CF_DAY_OF_MONTH);
+    } else {
+        res = do_prev(expr, calendar, dot);
+        if (0 != res) goto return_result;
+    }
+
+    month = calendar->tm_mon; /*day already adds one if no day in same month is found*/
+    update_month = find_prev(expr->months, CRON_MAX_MONTHS, month, calendar, CRON_CF_MONTH, CRON_CF_YEAR, resets, &res);
+    if (0 != res) goto return_result;
+    if (month != update_month) {
+        if (dot - calendar->tm_year > CRON_MAX_YEARS_DIFF) {
+            res = -1;
+            goto return_result;
+        }
+        res = do_prev(expr, calendar, dot);
+        if (0 != res) goto return_result;
+    }
+    goto return_result;
+
+    return_result:
+    if (!resets || !empty_list) {
+        res = -1;
+    }
+    if (resets) {
+        cron_free(resets);
+    }
+    if (empty_list) {
+        cron_free(empty_list);
+    }
+    return res;
+}
+
+time_t cron_prev(cron_expr* expr, time_t date) {
+    /*
+     The plan:
+
+     1 Round down to a whole second
+
+     2 If seconds match move on, otherwise find the next match:
+     2.1 If next match is in the next minute then roll forwards
+
+     3 If minute matches move on, otherwise find the next match
+     3.1 If next match is in the next hour then roll forwards
+     3.2 Reset the seconds and go to 2
+
+     4 If hour matches move on, otherwise find the next match
+     4.1 If next match is in the next day then roll forwards,
+     4.2 Reset the minutes and seconds and go to 2
+
+     ...
+     */
+    if (!expr) return CRON_INVALID_INSTANT;
+    struct tm calval;
+    memset(&calval, 0, sizeof(struct tm));
+    struct tm* calendar = cron_time(&date, &calval);
+    if (!calendar) return CRON_INVALID_INSTANT;
+    time_t original = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == original) return CRON_INVALID_INSTANT;
+
+    /* calculate the previous occurrence */
+    int res = do_prev(expr, calendar, calendar->tm_year);
+    if (0 != res) return CRON_INVALID_INSTANT;
+
+    /* check for a match, try from the next second if one wasn't found */
+    time_t calculated = cron_mktime(calendar);
+    if (CRON_INVALID_INSTANT == calculated) return CRON_INVALID_INSTANT;
+    if (calculated == original) {
+        /* We arrived at the original timestamp - round up to the next whole second and try again... */
+        res = add_to_field(calendar, CRON_CF_SECOND, -1);
+        if (0 != res) return CRON_INVALID_INSTANT;
+        res = do_prev(expr, calendar, calendar->tm_year);
+        if (0 != res) return CRON_INVALID_INSTANT;
+    }
+
+    return cron_mktime(calendar);
+}

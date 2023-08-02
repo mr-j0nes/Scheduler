@@ -3,7 +3,7 @@ project(BosmaScheduler)
 
 set(CMAKE_CXX_STANDARD 11)
 
-include_directories(ccronexpr)
+include_directories(ccronexpr /home/javier/develop/rating_engine/cpp/stm/stm_base_core/git-dep/CTPL)
 
 # threads
 set(THREADS_PREFER_PTHREAD_FLAG ON)

@@ -22,7 +22,7 @@
  */
 
 #ifndef CCRONEXPR_H
-#define	CCRONEXPR_H
+#define CCRONEXPR_H
 
 #if defined(__cplusplus) && !defined(CRON_COMPILE_AS_CXX)
 extern "C" {
@@ -35,15 +35,6 @@ extern "C" {
 #endif /* ANDROID */
 
 #include <stdint.h> /*added for use if uint*_t data types*/
-
-#ifndef ARRAY_LEN
-#define ARRAY_LEN(x) sizeof(x)/sizeof(x[0])
-#endif
-
-#ifdef __MINGW32__
-/* To avoid warning when building with mingw */
-time_t _mkgmtime(struct tm* tm);
-#endif /* __MINGW32__ */
 
 /**
  * Parsed cron expression
@@ -82,10 +73,23 @@ void cron_parse_expr(const char* expression, cron_expr* target, const char** err
  */
 time_t cron_next(cron_expr* expr, time_t date);
 
+/**
+ * Uses the specified expression to calculate the previous 'fire' date after
+ * the specified date. All dates are processed as UTC (GMT) dates 
+ * without timezones information. To use local dates (current system timezone) 
+ * instead of GMT compile with '-DCRON_USE_LOCAL_TIME'
+ * 
+ * @param expr parsed cron expression to use in previous date calculation
+ * @param date start date to start calculation from
+ * @return previous 'fire' date in case of success, '((time_t) -1)' in case of error.
+ */
+time_t cron_prev(cron_expr* expr, time_t date);
+
 
 #if defined(__cplusplus) && !defined(CRON_COMPILE_AS_CXX)
 } /* extern "C"*/
 #endif
 
-#endif	/* CCRONEXPR_H */
+#endif /* CCRONEXPR_H */
+
 
