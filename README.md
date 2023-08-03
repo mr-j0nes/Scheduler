@@ -1,44 +1,77 @@
-# Scheduler
-Modern C++ Header-Only Scheduling Library. Tasks run in thread pool. Requires C++11 and [ctpl_stl.h](https://github.com/vit-vit/CTPL) in the path.
+# TaskScheduler C++ Library
 
-Inspired by the [Rufus-Scheduler](https://github.com/jmettraux/rufus-scheduler) gem. Offers mostly the same functionality.
+TaskScheduler is an improved fork of the original [Bosma repository](https://github.com/Bosma/Scheduler), providing a simple and flexible task scheduling framework for C++. The library allows you to schedule tasks to run at specific intervals, specific times, or based on cron expressions. You can also enable or disable tasks dynamically during runtime.
 
-```C++
-  #include "Scheduler.h"
+## Features
 
-  // number of tasks that can run simultaneously
-  // Note: not the number of tasks that can be added,
-  //       but number of tasks that can be run in parallel
-  unsigned int max_n_threads = 12;
+- Schedule tasks to run at specific intervals or times.
+- Support for cron-like expressions for task scheduling.
+- Enable or disable tasks during runtime.
+- Thread-safe task scheduling and management.
+- Lightweight and easy to integrate into your C++ projects.
 
-  // Make a new scheduling object.
-  // Note: s cannot be moved or copied
-  Bosma::Scheduler s(max_n_threads);
+## Dependencies
 
-  // every second call message("every second")
-  s.every(1s, message, "every second");
+The following dependencies are required for TaskScheduler:
 
-  // in one minute
-  s.in(1min, []() { std::cout << "in one minute" << std::endl; });
+- CTPL (C++ Thread Pool Library) [link to CTPL repo]
+- ccronexpr (Cron Expression Parser for C++) [link to ccronexpr repo]
 
-  // in one second run lambda, then wait a second, run lambda, and so on
-  // different from every in that multiple instances of the function will not be run concurrently
-  s.interval(1s, []() {
-    std::this_thread::sleep_for(5s);
-    std::cout << "once every 6s" << std::endl;
-  });
+Please make sure to initialize the submodules by using the `--recurse-submodules` option when cloning the repository:
 
-  s.every(1min, []() { std::cout << "every minute" << std::endl; });
-
-  // https://en.wikipedia.org/wiki/Cron
-  s.cron("* * * * *", []() { std::cout << "top of every minute" << std::endl; });
-
-  // Time formats supported:
-  // %Y/%m/%d %H:%M:%S, %Y-%m-%d %H:%M:%S, %H:%M:%S
-  // With only a time given, it will run tomorrow if that time has already passed.
-  // But with a date given, it will run immediately if that time has already passed.
-  s.at("2017-04-19 12:31:15", []() { std::cout << "at a specific time." << std::endl; });
-
-  s.cron("5 0 * * *", []() { std::cout << "every day 5 minutes after midnight" << std::endl; });
+```bash
+git clone --recurse-submodules https://github.com/mr-j0nes/Scheduler.git
 ```
-See [example.cpp](example.cpp) for a full example.
+
+## Usage
+
+```cpp
+#include "TaskScheduler/Scheduler.hpp"
+
+// Create a scheduler with a maximum number of threads
+TaskScheduler::Scheduler scheduler(4);
+
+// Schedule a task to run every 5 seconds
+scheduler.every("Task1", std::chrono::seconds(5), []() {
+    // Your task code here
+    // This task will be executed every 5 seconds
+});
+
+// Schedule a task to run at a specific time
+scheduler.at("Task2", "2023-08-01 12:00:00", []() {
+    // Your task code here
+    // This task will be executed once at the specified time
+});
+
+// Schedule a task based on a cron expression
+scheduler.cron("Task3", "0 0 * * *", []() {
+    // Your task code here
+    // This task will be executed every day at midnight
+});
+
+// Schedule a task to run with a ccron expression
+scheduler.ccron("Task4", "*/5 * * * *", []() {
+    // Your task code here
+    // This task will be executed every 5 minutes
+});
+
+// Schedule a task to run at intervals without concurrency
+scheduler.interval("Task5", std::chrono::seconds(10), []() {
+    // Your task code here
+    // This task will be executed every 10 seconds, and no multiple instances will run concurrently
+});
+
+// Enable or disable tasks dynamically during runtime
+scheduler.disable_task("Task1");
+scheduler.enable_task("Task1");
+```
+
+**Note**: The difference between `interval` and `every` is that multiple instances of a task scheduled with `interval` will never be run concurrently, ensuring that the task is always completed before the next execution. On the other hand, tasks scheduled with `every` will run at the specified interval regardless of the completion time of the previous instance.
+
+## License
+
+TaskScheduler is released under the [MIT License](LICENSE).
+
+## Contributing
+
+Contributions to TaskScheduler are welcome! If you find a bug, have a feature request, or want to contribute improvements, please open an issue or submit a pull request.

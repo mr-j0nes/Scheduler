@@ -15,8 +15,28 @@
 
 #include "InterruptableSleep.hpp"
 
-namespace Bosma {
+namespace TaskScheduler {
     using Clock = std::chrono::system_clock;
+
+    class BadDateFormat : public std::exception {
+    public:
+        explicit BadDateFormat(std::string msg) : msg_(std::move(msg)) {}
+
+        const char *what() const noexcept override { return (msg_.c_str()); }
+
+    private:
+        std::string msg_;
+    };
+
+    class TaskAlreadyExists : public std::exception {
+    public:
+        explicit TaskAlreadyExists(std::string msg) : msg_(std::move(msg)) {}
+
+        const char *what() const noexcept override { return (msg_.c_str()); }
+
+    private:
+        std::string msg_;
+    };
 
     struct TaskReport {
       TaskReport( std::string id, std::string time_str, bool enabled): id(id), time_str(time_str), enabled(enabled)
@@ -84,16 +104,6 @@ namespace Bosma {
 
     class CCronTask : public Task {
     public:
-        class BadCronExpression : public std::exception {
-        public:
-            explicit BadCronExpression(std::string msg) : msg_(std::move(msg)) {}
-
-            const char *what() const noexcept override { return (msg_.c_str()); }
-
-        private:
-            std::string msg_;
-        };
-
         CCronTask(const std::string &task_id, const std::string &time_str, std::string expression, std::function<void()> &&f) : Task(task_id, time_str, std::move(f), true),
                                                                        exp(std::move(expression)) {}
 
@@ -186,7 +196,7 @@ namespace Bosma {
             tp = Clock::from_time_t(std::mktime(&tm));
           } else {
             // could not parse time
-            throw std::runtime_error("Cannot parse time string: " + time);
+            throw BadDateFormat("Cannot parse time string: " + time);
           }
 
           // std::string time_str {"at: " + time};
@@ -290,7 +300,7 @@ namespace Bosma {
     private:
         std::atomic<bool> done;
 
-        Bosma::InterruptableSleep sleeper;
+        TaskScheduler::InterruptableSleep sleeper;
 
         std::multimap<Clock::time_point, std::shared_ptr<Task>> tasks;
         std::multimap<Clock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
@@ -313,7 +323,7 @@ namespace Bosma {
             tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
             sleeper.interrupt();
           } else {
-            throw std::runtime_error("Task with id <" + task_id + "> already exists");
+            throw TaskAlreadyExists("Task with id <" + task_id + "> already exists");
           }
         }
 
@@ -393,7 +403,7 @@ namespace Bosma {
 
           if (strftime(buffer, sizeof(buffer), format.c_str(), date_tm) == 0)
           {
-            // throw DateFormatException("Error in given format <" + format + ">");
+            throw BadDateFormat("Error in given format <" + format + ">");
           }
 
           return std::string(buffer);
@@ -483,4 +493,5 @@ namespace Bosma {
           return os.str();
         }
     };
+
 }

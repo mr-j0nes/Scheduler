@@ -4,7 +4,7 @@
 #include <vector>
 #include <iterator>
 
-namespace Bosma {
+namespace TaskScheduler {
     using Clock = std::chrono::system_clock;
 
     inline void add(std::tm &tm, Clock::duration time) {
