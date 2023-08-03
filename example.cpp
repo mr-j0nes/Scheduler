@@ -15,7 +15,7 @@ int main() {
 
   // Make a new scheduling object.
   // Note: s cannot be moved or copied
-  TaskScheduler::Scheduler s(max_n_threads);
+  Cppsched::Scheduler s(max_n_threads);
 
   // every second call message("every second")
   s.every("every", std::chrono::seconds(1), message, "every second");
@@ -23,7 +23,7 @@ int main() {
   // Duplicate task
   try {
     s.every("every", std::chrono::seconds(1), message, "every second");
-  } catch (const TaskScheduler::TaskAlreadyExists &e) {
+  } catch (const Cppsched::TaskAlreadyExists &e) {
     std::cerr << "ERROR: " << e.what() << "\n";
   }
 
@@ -52,9 +52,9 @@ int main() {
 
   // Wrong date
   try {
-    s.at("at3", "223-08-0216:29:18",
+    s.at("at3", "blah blah",
        []() { std::cout << "at a specific time." << std::endl; });
-  } catch (const TaskScheduler::BadDateFormat &e) {
+  } catch (const Cppsched::BadDateFormat &e) {
     std::cerr << "ERROR: " << e.what() << "\n";
   }
 
@@ -78,7 +78,7 @@ int main() {
       s.cron("cron3", "blah blah", []() {
         std::cout << "Wrong expression" << std::endl;
       });
-  } catch (const TaskScheduler::BadCronExpression &e) {
+  } catch (const Cppsched::BadCronExpression &e) {
     std::cerr << "ERROR: " << e.what() << "\n";
   }
 
@@ -112,7 +112,7 @@ int main() {
           std::cout << "Removed: every\n";
           });
 
-  // destructor of TaskScheduler::Scheduler will cancel all schedules but finish any
+  // destructor of Cppsched::Scheduler will cancel all schedules but finish any
   // tasks currently running
   std::this_thread::sleep_for(std::chrono::minutes(10));
 

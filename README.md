@@ -1,6 +1,14 @@
-# TaskScheduler C++ Library [Test](https://github.com/mr-j0nes/Scheduler/actions/workflows/ci.yml/badge.svg)
+# CppScheduler C++ Library ![Test](https://github.com/mr-j0nes/Scheduler/actions/workflows/ci.yml/badge.svg)
 
-TaskScheduler is an improved fork of the original [Bosma repository](https://github.com/Bosma/Scheduler), providing a simple and flexible task scheduling framework for C++. The library allows you to schedule tasks to run at specific intervals, specific times, or based on cron expressions. You can also enable or disable tasks dynamically during runtime, as well as removing them via their Id.
+CppScheduler is an improved fork of the original [Bosma repository](https://github.com/Bosma/Scheduler), providing a simple and flexible task scheduling framework for C++. The library allows you to schedule tasks to run at specific intervals, specific times, or based on cron expressions. You can also enable or disable tasks dynamically during runtime, as well as removing them via their Id.
+
+## Differences with the original
+
+- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
+- Namespace changed
+- Naming convention changed
+- Supported enabling/disabling/removing tasks
+- Tasks should be added with a unique Id (task name)
 
 ## Features
 
@@ -13,7 +21,7 @@ TaskScheduler is an improved fork of the original [Bosma repository](https://git
 
 ## Dependencies
 
-The following dependencies are required for TaskScheduler:
+The following dependencies are required for CppScheduler:
 
 - [CTPL](https://github.com/vit-vit/CTPL) (C++ Thread Pool Library) [link to CTPL repo]
 - [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
@@ -27,10 +35,10 @@ git clone --recurse-submodules https://github.com/mr-j0nes/Scheduler.git
 ## Usage
 
 ```cpp
-#include "TaskScheduler/Scheduler.hpp"
+#include "Cppsched/Scheduler.hpp"
 
 // Create a scheduler with a maximum number of threads
-TaskScheduler::Scheduler scheduler(4);
+Cppsched::Scheduler scheduler(4);
 
 // Schedule a task to run every 5 seconds
 scheduler.every("Task1", std::chrono::seconds(5), []() {
@@ -68,8 +76,8 @@ scheduler.remove_task("Task1");
 
 ## License
 
-TaskScheduler is released under the [MIT License](LICENSE).
+CppScheduler is released under the [MIT License](LICENSE).
 
 ## Contributing
 
-Contributions to TaskScheduler are welcome! If you find a bug, have a feature request, or want to contribute improvements, please open an issue or submit a pull request.
+Contributions to CppScheduler are welcome! If you find a bug, have a feature request, or want to contribute improvements, please open an issue or submit a pull request.
