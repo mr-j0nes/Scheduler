@@ -1,5 +1,7 @@
+#include <chrono>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 
 #include "Scheduler.hpp"
 
@@ -45,8 +47,12 @@ int main() {
   // With only a time given, it will run tomorrow if that time has already
   // passed. But with a date given, it will run immediately if that time has
   // already passed.
-  s.at("at", "2017-04-19 12:31:15",
+  s.at("at", "2123-08-02 16:29:18",
        []() { std::cout << "at a specific time." << std::endl; });
+
+  // At now plus 9 seconds
+  s.at("at2", std::chrono::system_clock::now() + std::chrono::seconds(9),
+       []() { std::cout << "at another specific time." << std::endl; });
 
   // built-in simple cron calculator, uses local time, see Cron.h
   // expression format:
@@ -74,7 +80,25 @@ int main() {
   s.ccron("ccron", "*/5 * 0-2 * * *", []() {
     std::cout << "every 5 seconds between 0:00-2:00 UTC" << std::endl;
   });
+
+
   ctpl::thread_pool threads(2);
+
+
+  // Print all tasks
+  threads.push([&s](int){
+      while(true)
+      {
+        for (const auto &task : s.get_tasks_list())
+        {
+          std::cout << "-> Task Id: <" << task.id << "> 	trigger: <" << task.time_str << ">	enabled: <" << task.enabled << ">\n";
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(15) + std::chrono::milliseconds(500));
+      }
+      });
+
+  // Disable/Enable/Remove tasks
   threads.push([&s](int){
           std::this_thread::sleep_for(std::chrono::seconds(10));
           s.disable_task("every");
