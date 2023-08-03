@@ -1,10 +1,13 @@
 #pragma once
 
+#include <chrono>
 #include <iomanip>
 #include <map>
 #include <cstring>
 #include <stdexcept>
 #include <map>
+#include <ctime>
+#include <utility>
 
 #include "ctpl_stl.h"
 #include "ccronexpr.h"
@@ -15,10 +18,19 @@
 namespace Bosma {
     using Clock = std::chrono::system_clock;
 
+    struct TaskReport {
+      TaskReport( std::string id, std::string time_str, bool enabled): id(id), time_str(time_str), enabled(enabled)
+      {}
+
+      std::string id;
+      std::string time_str;
+      bool enabled;
+    };
+
     class Task {
     public:
         explicit Task(const std::string &task_id, const std::string &time_str, std::function<void()> &&f, bool recur = false, bool interval = false, bool enabled  = true) :
-                id(task_id), f(std::move(f)), recur(recur), interval(interval), enabled(enabled) {}
+                id(task_id), time_str(time_str), f(std::move(f)), recur(recur), interval(interval), enabled(enabled) {}
 
         virtual Clock::time_point get_new_time() const = 0;
 
@@ -34,6 +46,14 @@ namespace Bosma {
     class InTask : public Task {
     public:
         explicit InTask(const std::string &task_id, const std::string &time_str, std::function<void()> &&f) : Task(task_id, time_str, std::move(f)) {}
+
+        // dummy time_point because it's not used
+        Clock::time_point get_new_time() const override { return Clock::time_point(Clock::duration(0)); }
+    };
+
+    class AtTask : public Task { // Basically same as in
+    public:
+        explicit AtTask(const std::string &task_id, const std::string &time_str, std::function<void()> &&f) : Task(task_id, time_str, std::move(f)) {}
 
         // dummy time_point because it's not used
         Clock::time_point get_new_time() const override { return Clock::time_point(Clock::duration(0)); }
@@ -129,16 +149,19 @@ namespace Bosma {
         }
 
         template<typename _Callable, typename... _Args>
-        void in(const std::string &task_id, const Clock::time_point time, _Callable &&f, _Args &&... args) {
-          std::string time_str; // TODO: complete
+        void in(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
+          std::string time_str {"in: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<InTask>(task_id, time_str, 
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
-          add_task(task_id, time, std::move(t));
+          add_task(task_id, Clock::now() + time, std::move(t));
         }
 
         template<typename _Callable, typename... _Args>
-        void in(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
-          in(task_id, Clock::now() + time, std::forward<_Callable>(f), std::forward<_Args>(args)...);
+        void at(const std::string &task_id, const Clock::time_point time, _Callable &&f, _Args &&... args) {
+          std::string time_str {"in: " + format_time_point("%F %T %z", time)};
+          std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str, 
+                  std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
+          add_task(task_id, time, std::move(t));
         }
 
         template<typename _Callable, typename... _Args>
@@ -166,13 +189,16 @@ namespace Bosma {
             throw std::runtime_error("Cannot parse time string: " + time);
           }
 
-          // TODO: change to add_task
-          in(task_id, tp, std::forward<_Callable>(f), std::forward<_Args>(args)...);
+          // std::string time_str {"at: " + time};
+          std::string time_str {"at: " + format_time_point("%F %T %z", tp)};
+          std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str, 
+                  std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
+          add_task(task_id, tp, std::move(t));
         }
 
         template<typename _Callable, typename... _Args>
         void every(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
-          std::string time_str; // TODO: complete
+          std::string time_str {"every: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...));
           auto next_time = t->get_new_time();
@@ -181,7 +207,7 @@ namespace Bosma {
 
         template<typename _Callable, typename... _Args>
         void cron(const std::string &task_id, const std::string &expression, _Callable &&f, _Args &&... args) {
-          std::string time_str; // TODO: complete
+          std::string time_str {"cron: " + expression};
           std::shared_ptr<Task> t = std::make_shared<CronTask>(task_id, time_str, expression, std::bind(std::forward<_Callable>(f),
                                                                                      std::forward<_Args>(args)...));
           auto next_time = t->get_new_time();
@@ -190,7 +216,7 @@ namespace Bosma {
 
         template<typename _Callable, typename... _Args>
         void ccron(const std::string &task_id, const std::string &expression, _Callable &&f, _Args &&... args) {
-          std::string time_str; // TODO: complete
+          std::string time_str {"cron: " + expression};
           std::shared_ptr<Task> t = std::make_shared<CCronTask>(task_id, time_str, expression, std::bind(std::forward<_Callable>(f),
                                                                                       std::forward<_Args>(args)...));
           auto next_time = t->get_new_time();
@@ -199,7 +225,7 @@ namespace Bosma {
 
         template<typename _Callable, typename... _Args>
         void interval(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
-          std::string time_str; // TODO: complete
+          std::string time_str {"interval: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...), true);
           add_task(task_id, Clock::now(), std::move(t));
@@ -245,19 +271,38 @@ namespace Bosma {
           }
         }
 
+        std::vector<TaskReport> get_tasks_list() 
+        {
+          std::vector<TaskReport> v;
+
+          {
+            std::lock_guard<std::mutex> l(lock);
+            for (auto &map_pair : tasks_map)
+            {
+              auto &task {map_pair.second->second};
+              v.push_back(TaskReport(task->id, task->time_str, task->enabled));
+            }
+          }
+
+          return std::move(v);
+        }
+
     private:
         std::atomic<bool> done;
 
         Bosma::InterruptableSleep sleeper;
 
         std::multimap<Clock::time_point, std::shared_ptr<Task>> tasks;
+        std::multimap<Clock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
         std::map<std::string, std::multimap<Clock::time_point, std::shared_ptr<Task>>::iterator> tasks_map;
         std::mutex lock;
         ctpl::thread_pool threads;
 
         void add_task(const Clock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
-          tasks.emplace(time, std::move(t));
+          const std::string &task_id {t->id};
+          auto inserted_task = tasks.emplace(time, std::move(t));
+          tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
           sleeper.interrupt();
         }
 
@@ -291,26 +336,33 @@ namespace Bosma {
 
               if (task->interval) {
                 // if it's an interval task, only add the task back after f() is completed
-                threads.push([this, task](int) {
-                    if (task->enabled)
-                        task->f();
-                    // no risk of race-condition,
-                    // add_task() will wait for manage_tasks() to release lock
-                    add_task(task->get_new_time(), task);
-                });
+                if (task->enabled) {
+
+                  // Temrporarily save task until completed
+                  auto inserted_task = completed_interval_tasks.insert(*i);
+                  tasks_map[task->id] = inserted_task;
+
+                  // Run
+                  threads.push([this, task, inserted_task](int) {
+                      task->f();
+                      // no risk of race-condition,
+                      // add_task() will wait for manage_tasks() to release lock
+                      add_task(task->get_new_time(), task);
+                      completed_interval_tasks.erase(inserted_task);
+                      });
+                }
               } else {
-                threads.push([task](int) {
-                    if (task->enabled)
-                        task->f();
-                });
-                if (task->recur)
-                {
+                if (task->enabled) {
+                  threads.push([task](int) {
+                      task->f();
+                      });
+                }
+
+                if (task->recur) {
                   // calculate time of next run and add the new task to the tasks to be recurred
                   recurred_tasks.emplace(task->get_new_time(), std::move(task));
-                }
-                else
-                {
-                  // save non recorred to remove from tasks_map
+                } else {
+                  // save non recurred to remove from tasks_map
                   non_recurred_tasks.push_back(task);
                 }
               }
@@ -324,14 +376,111 @@ namespace Bosma {
               tasks.emplace(task_pair.first, std::move(task_pair.second));
 
             // remove from tasks_map
-            for (auto &task: non_recurred_tasks)
-            {
+            for (auto &task: non_recurred_tasks) {
               auto task_map_iterator = tasks_map.find(task->id);
               if (task_map_iterator != tasks_map.end()) {
                 tasks_map.erase(task_map_iterator);
               }
             }
           }
+        }
+
+        inline std::string format_time_point(const std::string &format, const Clock::time_point date) const 
+        {
+          char       buffer[80] = "";
+          std::time_t date_c = std::chrono::system_clock::to_time_t(date);
+          std::tm *date_tm = std::localtime(&date_c);
+
+          if (strftime(buffer, sizeof(buffer), format.c_str(), date_tm) == 0)
+          {
+            // throw DateFormatException("Error in given format <" + format + ">");
+          }
+
+          return std::string(buffer);
+
+        }
+
+        inline std::string format_duration(std::chrono::nanoseconds timeunit) const 
+        {
+          std::chrono::nanoseconds ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(timeunit);
+          std::ostringstream os;
+          bool               foundNonZero = false;
+          os.fill('0');
+          typedef std::chrono::duration<int, std::ratio<86400 * 365>> years;
+          const auto y = std::chrono::duration_cast<years>(ns);
+          if (y.count())
+          {
+            foundNonZero = true;
+            os << y.count() << "y";
+            ns -= y;
+          }
+          typedef std::chrono::duration<int, std::ratio<86400>> days;
+          const auto d = std::chrono::duration_cast<days>(ns);
+          if (d.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            foundNonZero = true;
+            os << d.count() << "d";
+            ns -= d;
+          }
+          const auto h = std::chrono::duration_cast<std::chrono::hours>(ns);
+          if (h.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            foundNonZero = true;
+            os << h.count() << "h";
+            ns -= h;
+          }
+          const auto m = std::chrono::duration_cast<std::chrono::minutes>(ns);
+          if (m.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            foundNonZero = true;
+            os << m.count() << "m";
+            ns -= m;
+          }
+          const auto s = std::chrono::duration_cast<std::chrono::seconds>(ns);
+          if (s.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            foundNonZero = true;
+            os << s.count() << "s";
+            ns -= s;
+          }
+          const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(ns);
+          if (ms.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            foundNonZero = true;
+            os << ms.count() << "ms";
+            ns -= ms;
+          }
+          const auto us = std::chrono::duration_cast<std::chrono::microseconds>(ns);
+          if (us.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            os << us.count() << "us";
+            ns -= us;
+          }
+          if (ns.count())
+          {
+            if (foundNonZero)
+              os << ":";
+            foundNonZero = true;
+            os << ns.count() << "ns";
+          }
+          if (! foundNonZero)
+          {
+            os << "0s";
+          }
+          return os.str();
         }
     };
 }

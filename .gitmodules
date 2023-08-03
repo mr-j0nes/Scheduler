@@ -1,0 +1,6 @@
+[submodule "externals/ccronexpr"]
+	path = externals/ccronexpr
+	url = https://github.com/staticlibs/ccronexpr.git
+[submodule "externals/CTPL"]
+	path = externals/CTPL
+	url = https://github.com/vit-vit/CTPL.git

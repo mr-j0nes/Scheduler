@@ -3,11 +3,11 @@ project(BosmaScheduler)
 
 set(CMAKE_CXX_STANDARD 11)
 
-include_directories(ccronexpr /home/javier/develop/rating_engine/cpp/stm/stm_base_core/git-dep/CTPL)
+include_directories(externals/ccronexpr externals/CTPL)
 
 # threads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-add_executable(example example.cpp ccronexpr/ccronexpr.c)
+add_executable(example example.cpp externals/ccronexpr/ccronexpr.c)
 target_link_libraries(example Threads::Threads)
