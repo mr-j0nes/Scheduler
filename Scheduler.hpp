@@ -1,5 +1,4 @@
 #pragma once
-#include <iostream>
 
 #include <chrono>
 #include <iomanip>
@@ -13,24 +12,7 @@
 #include "ctpl_stl.h"
 #include "croncpp.h"
 
-#include "InterruptableSleep.hpp"
-
-        inline std::string format_time_point(const std::string &format, const std::chrono::system_clock::time_point date) 
-        {
-          char       buffer[80] = "";
-          std::time_t date_c = std::chrono::system_clock::to_time_t(date);
-          std::tm *date_tm = std::localtime(&date_c);
-
-          if (strftime(buffer, sizeof(buffer), format.c_str(), date_tm) == 0)
-          {
-            // throw BadDateFormat("Error in given format <" + format + ">");
-          }
-
-          return std::string(buffer);
-
-        }
-
-namespace TaskScheduler {
+namespace Cppsched {
     using Clock = std::chrono::system_clock;
 
     class BadDateFormat : public std::exception {
@@ -136,8 +118,6 @@ namespace TaskScheduler {
                 throw BadCronExpression(std::string(e.what()));
             }
 
-            // return Clock::from_time_t(next);
-            std::cout << "Now: " << format_time_point("%F %T %z", Clock::now()) << " Time: " << format_time_point("%F %T %z", next) << "\n";
             return next;
         };
 
@@ -148,6 +128,60 @@ namespace TaskScheduler {
       std::stringstream ss(expression);
       return !(ss >> std::get_time(&tm, format.c_str())).fail();
     }
+
+    class InterruptableSleep {
+
+        using Clock = std::chrono::system_clock;
+
+        // InterruptableSleep offers a sleep that can be interrupted by any thread.
+        // It can be interrupted multiple times
+        // and be interrupted before any sleep is called (the sleep will immediately complete)
+        // Has same interface as condition_variables and futures, except with sleep instead of wait.
+        // For a given object, sleep can be called on multiple threads safely, but is not recommended as behaviour is undefined.
+
+    public:
+        InterruptableSleep() : interrupted(false) {
+        }
+
+        InterruptableSleep(const InterruptableSleep &) = delete;
+
+        InterruptableSleep(InterruptableSleep &&) noexcept = delete;
+
+        ~InterruptableSleep() noexcept = default;
+
+        InterruptableSleep &operator=(const InterruptableSleep &) noexcept = delete;
+
+        InterruptableSleep &operator=(InterruptableSleep &&) noexcept = delete;
+
+        void sleep_for(Clock::duration duration) {
+          std::unique_lock<std::mutex> ul(m);
+          cv.wait_for(ul, duration, [this] { return interrupted; });
+          interrupted = false;
+        }
+
+        void sleep_until(Clock::time_point time) {
+          std::unique_lock<std::mutex> ul(m);
+          cv.wait_until(ul, time, [this] { return interrupted; });
+          interrupted = false;
+        }
+
+        void sleep() {
+          std::unique_lock<std::mutex> ul(m);
+          cv.wait(ul, [this] { return interrupted; });
+          interrupted = false;
+        }
+
+        void interrupt() {
+          std::lock_guard<std::mutex> lg(m);
+          interrupted = true;
+          cv.notify_one();
+        }
+
+    private:
+        bool interrupted;
+        std::mutex m;
+        std::condition_variable cv;
+    };
 
     class Scheduler {
     public:
@@ -188,7 +222,7 @@ namespace TaskScheduler {
 
         template<typename _Callable, typename... _Args>
         void at(const std::string &task_id, const Clock::time_point time, _Callable &&f, _Args &&... args) {
-          std::string time_str {"in: " + format_time_point("%F %T %z", time)};
+          std::string time_str {"at: " + format_time_point("%F %T %z", time)};
           std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str, 
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
           add_task(task_id, time, std::move(t));
@@ -311,7 +345,7 @@ namespace TaskScheduler {
     private:
         std::atomic<bool> done;
 
-        TaskScheduler::InterruptableSleep sleeper;
+        InterruptableSleep sleeper;
 
         std::multimap<Clock::time_point, std::shared_ptr<Task>> tasks;
         std::multimap<Clock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
