@@ -38,10 +38,6 @@ int main() {
     std::this_thread::sleep_for(std::chrono::seconds(5));
   });
 
-  // https://en.wikipedia.org/wiki/Cron
-  s.cron("cron", "* * * * *",
-         []() { std::cout << "top of every minute" << std::endl; });
-
   // Time formats supported:
   // %Y/%m/%d %H:%M:%S, %Y-%m-%d %H:%M:%S, %H:%M:%S
   // With only a time given, it will run tomorrow if that time has already
@@ -56,51 +52,30 @@ int main() {
 
   // Wrong date
   try {
-  s.at("at3", "223-08-0216:29:18",
+    s.at("at3", "223-08-0216:29:18",
        []() { std::cout << "at a specific time." << std::endl; });
   } catch (const TaskScheduler::BadDateFormat &e) {
     std::cerr << "ERROR: " << e.what() << "\n";
   }
 
-  // built-in simple cron calculator, uses local time, see Cron.h
-  // expression format:
-  // from https://en.wikipedia.org/wiki/Cron#Overview
-  //      ┌───────────── minute (0 - 59)
-  //      │ ┌───────────── hour (0 - 23)
-  //      │ │ ┌───────────── day of month (1 - 31)
-  //      │ │ │ ┌───────────── month (1 - 12)
-  //      │ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)
-  //      │ │ │ │ │
-  //      │ │ │ │ │
-  s.cron("cron2", "5 0 * * *", []() {
-    std::cout << "every day 5 minutes after midnight" << std::endl;
-  });
-
-  // Bad cron expression
-  try {
-      s.cron("cron3", "blah blah", []() {
-        std::cout << "Wrong expression" << std::endl;
-      });
-  } catch (const TaskScheduler::BadCronExpression &e) {
-    std::cerr << "ERROR: " << e.what() << "\n";
-  }
-
-  // using https://github.com/staticlibs/ccronexpr
-  // Note: uses UTC unless compiled with -DCRON_USE_LOCAL_TIME
+  // using https://github.com/mariusbancila/croncpp
   // Note: first field is seconds
-  // Supports more advanced expressions:
+  // Supports advanced expressions:
   // expression           current time           next cron time
   // "*/15 * 1-4 * * *",  "2012-07-01_09:53:50", "2012-07-02_01:00:00"
   // "0 */2 1-4 * * *",   "2012-07-01_09:00:00", "2012-07-02_01:00:00"
   // "0 0 7 ? * MON-FRI", "2009-09-26_00:42:55", "2009-09-28_07:00:00"
   // "0 30 23 30 1/3 ?",  "2011-04-30_23:30:00", "2011-07-30_23:30:00"
-  s.ccron("ccron", "*/5 * 0-2 * * *", []() {
-    std::cout << "every 5 seconds between 0:00-2:00 UTC" << std::endl;
+  s.cron("cron", "*/5 * 13-15 * * *", []() {
+    std::cout << "every 5 seconds between 13:00-15:00 Localtime" << std::endl;
   });
 
-  // Bad ccron expression
+  s.cron("cron2", "0 * * * * *",
+         []() { std::cout << "top of every minute" << std::endl; });
+
+  // Bad cron expression
   try {
-      s.ccron("ccron2", "blah blah", []() {
+      s.cron("cron3", "blah blah", []() {
         std::cout << "Wrong expression" << std::endl;
       });
   } catch (const TaskScheduler::BadCronExpression &e) {

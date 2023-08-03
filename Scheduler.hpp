@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 
 #include <chrono>
 #include <iomanip>
@@ -10,10 +11,24 @@
 #include <utility>
 
 #include "ctpl_stl.h"
-#include "ccronexpr.h"
-#include "Cron.hpp"
+#include "croncpp.h"
 
 #include "InterruptableSleep.hpp"
+
+        inline std::string format_time_point(const std::string &format, const std::chrono::system_clock::time_point date) 
+        {
+          char       buffer[80] = "";
+          std::time_t date_c = std::chrono::system_clock::to_time_t(date);
+          std::tm *date_tm = std::localtime(&date_c);
+
+          if (strftime(buffer, sizeof(buffer), format.c_str(), date_tm) == 0)
+          {
+            // throw BadDateFormat("Error in given format <" + format + ">");
+          }
+
+          return std::string(buffer);
+
+        }
 
 namespace TaskScheduler {
     using Clock = std::chrono::system_clock;
@@ -31,6 +46,16 @@ namespace TaskScheduler {
     class TaskAlreadyExists : public std::exception {
     public:
         explicit TaskAlreadyExists(std::string msg) : msg_(std::move(msg)) {}
+
+        const char *what() const noexcept override { return (msg_.c_str()); }
+
+    private:
+        std::string msg_;
+    };
+
+    class BadCronExpression : public std::exception {
+    public:
+        explicit BadCronExpression(std::string msg) : msg_(std::move(msg)) {}
 
         const char *what() const noexcept override { return (msg_.c_str()); }
 
@@ -93,32 +118,27 @@ namespace TaskScheduler {
 
     class CronTask : public Task {
     public:
-        CronTask(const std::string &task_id, const std::string &time_str, const std::string &expression, std::function<void()> &&f) : Task(task_id, time_str, std::move(f), true),
-                                                                             cron(expression) {}
-
-        Clock::time_point get_new_time() const override {
-          return cron.cron_to_next();
-        };
-        Cron cron;
-    };
-
-    class CCronTask : public Task {
-    public:
-        CCronTask(const std::string &task_id, const std::string &time_str, std::string expression, std::function<void()> &&f) : Task(task_id, time_str, std::move(f), true),
+        CronTask(const std::string &task_id, const std::string &time_str, std::string expression, std::function<void()> &&f) : Task(task_id, time_str, std::move(f), true),
                                                                        exp(std::move(expression)) {}
 
         Clock::time_point get_new_time() const override {
-          cron_expr expr;
-          memset(&expr, 0, sizeof(expr));
-          const char *err = nullptr;
-          cron_parse_expr(exp.c_str(), &expr, &err);
-          if (err) {
-            throw BadCronExpression(std::string(err));
-          }
-          time_t cur = Clock::to_time_t(Clock::now());
-          time_t next = cron_next(&expr, cur);
 
-          return Clock::from_time_t(next);
+            Clock::time_point next;
+            try
+            {
+                auto cron = cron::make_cron(exp);
+
+                std::time_t now = std::time(0);
+                next = cron::cron_next(cron, Clock::now());
+            }
+            catch (cron::bad_cronexpr const & e)
+            {
+                throw BadCronExpression(std::string(e.what()));
+            }
+
+            // return Clock::from_time_t(next);
+            std::cout << "Now: " << format_time_point("%F %T %z", Clock::now()) << " Time: " << format_time_point("%F %T %z", next) << "\n";
+            return next;
         };
 
         std::string exp;
@@ -219,15 +239,6 @@ namespace TaskScheduler {
         void cron(const std::string &task_id, const std::string &expression, _Callable &&f, _Args &&... args) {
           std::string time_str {"cron: " + expression};
           std::shared_ptr<Task> t = std::make_shared<CronTask>(task_id, time_str, expression, std::bind(std::forward<_Callable>(f),
-                                                                                     std::forward<_Args>(args)...));
-          auto next_time = t->get_new_time();
-          add_task(task_id, next_time, std::move(t));
-        }
-
-        template<typename _Callable, typename... _Args>
-        void ccron(const std::string &task_id, const std::string &expression, _Callable &&f, _Args &&... args) {
-          std::string time_str {"cron: " + expression};
-          std::shared_ptr<Task> t = std::make_shared<CCronTask>(task_id, time_str, expression, std::bind(std::forward<_Callable>(f),
                                                                                       std::forward<_Args>(args)...));
           auto next_time = t->get_new_time();
           add_task(task_id, next_time, std::move(t));

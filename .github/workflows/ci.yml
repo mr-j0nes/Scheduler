@@ -17,4 +17,5 @@ jobs:
         make -j4
     - name: Test
       run: |
+        cd build
         ./example
