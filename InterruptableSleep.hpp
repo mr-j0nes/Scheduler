@@ -6,7 +6,7 @@
 #include <mutex>
 #include <sstream>
 
-namespace Bosma {
+namespace TaskScheduler {
     class InterruptableSleep {
 
         using Clock = std::chrono::system_clock;

@@ -15,7 +15,7 @@ int main() {
 
   // Make a new scheduling object.
   // Note: s cannot be moved or copied
-  Bosma::Scheduler s(max_n_threads);
+  TaskScheduler::Scheduler s(max_n_threads);
 
   // every second call message("every second")
   s.every("every", std::chrono::seconds(1), message, "every second");
@@ -23,12 +23,12 @@ int main() {
   // Duplicate task
   try {
     s.every("every", std::chrono::seconds(1), message, "every second");
-  } catch (const std::runtime_error &e) {
-    std::cerr << e.what() << "\n";
+  } catch (const TaskScheduler::TaskAlreadyExists &e) {
+    std::cerr << "ERROR: " << e.what() << "\n";
   }
 
   // in one minute
-  s.in("in", std::chrono::minutes(1),
+  s.in("in", std::chrono::minutes(1) + std::chrono::seconds(2) + std::chrono::milliseconds(500),
        []() { std::cout << "in one minute" << std::endl; });
   // run lambda, then wait a second, run lambda, and so on
   // different from every in that multiple instances of the function will never
@@ -54,6 +54,14 @@ int main() {
   s.at("at2", std::chrono::system_clock::now() + std::chrono::seconds(9),
        []() { std::cout << "at another specific time." << std::endl; });
 
+  // Wrong date
+  try {
+  s.at("at3", "223-08-0216:29:18",
+       []() { std::cout << "at a specific time." << std::endl; });
+  } catch (const TaskScheduler::BadDateFormat &e) {
+    std::cerr << "ERROR: " << e.what() << "\n";
+  }
+
   // built-in simple cron calculator, uses local time, see Cron.h
   // expression format:
   // from https://en.wikipedia.org/wiki/Cron#Overview
@@ -68,6 +76,15 @@ int main() {
     std::cout << "every day 5 minutes after midnight" << std::endl;
   });
 
+  // Bad cron expression
+  try {
+      s.cron("cron3", "blah blah", []() {
+        std::cout << "Wrong expression" << std::endl;
+      });
+  } catch (const TaskScheduler::BadCronExpression &e) {
+    std::cerr << "ERROR: " << e.what() << "\n";
+  }
+
   // using https://github.com/staticlibs/ccronexpr
   // Note: uses UTC unless compiled with -DCRON_USE_LOCAL_TIME
   // Note: first field is seconds
@@ -80,6 +97,15 @@ int main() {
   s.ccron("ccron", "*/5 * 0-2 * * *", []() {
     std::cout << "every 5 seconds between 0:00-2:00 UTC" << std::endl;
   });
+
+  // Bad ccron expression
+  try {
+      s.ccron("ccron2", "blah blah", []() {
+        std::cout << "Wrong expression" << std::endl;
+      });
+  } catch (const TaskScheduler::BadCronExpression &e) {
+    std::cerr << "ERROR: " << e.what() << "\n";
+  }
 
 
   ctpl::thread_pool threads(2);
@@ -111,7 +137,9 @@ int main() {
           std::cout << "Removed: every\n";
           });
 
-  // destructor of Bosma::Scheduler will cancel all schedules but finish any
+  // destructor of TaskScheduler::Scheduler will cancel all schedules but finish any
   // tasks currently running
   std::this_thread::sleep_for(std::chrono::minutes(10));
+
+  return 0;
 }
