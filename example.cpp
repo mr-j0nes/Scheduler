@@ -20,7 +20,7 @@ int main() {
   // every second call message("every second")
   s.every("every", std::chrono::seconds(1), message, "every second");
 
-  // Duplicate task
+  // duplicate task
   try {
     s.every("every", std::chrono::seconds(1), message, "every second");
   } catch (const Cppsched::TaskAlreadyExists &e) {
@@ -30,6 +30,11 @@ int main() {
   // in one minute
   s.in("in", std::chrono::minutes(1) + std::chrono::seconds(2) + std::chrono::milliseconds(500),
        []() { std::cout << "in one minute" << std::endl; });
+
+  // raise exception (This is caught by CTPL, Scheduler does not take any action on error)
+  s.in("in2", std::chrono::seconds(8),
+       []() { std::cout << "raise exception" << std::endl; throw std::runtime_error("Exception");});
+
   // run lambda, then wait a second, run lambda, and so on
   // different from every in that multiple instances of the function will never
   // be run concurrently
@@ -87,8 +92,9 @@ int main() {
 
 
   // Print all tasks
-  threads.push([&s](int){
-      while(true)
+  bool done {false}; 
+  threads.push([&s, &done](int){
+      while(! done)
       {
         for (const auto &task : s.get_tasks_list())
         {
@@ -103,18 +109,22 @@ int main() {
   threads.push([&s](int){
           std::this_thread::sleep_for(std::chrono::seconds(10));
           s.disable_task("every");
-          std::cout << "Disabled: every\n";
+          std::cout << "disabled: every\n";
           std::this_thread::sleep_for(std::chrono::seconds(10));
           s.enable_task("every");
-          std::cout << "Enabled: every\n";
+          std::cout << "enabled: every\n";
           std::this_thread::sleep_for(std::chrono::seconds(10));
           s.remove_task("every");
-          std::cout << "Removed: every\n";
+          std::cout << "removed: every\n";
           });
+
+  std::this_thread::sleep_for(std::chrono::minutes(3));
+
+  done = true;
+
+  std::cout << "Done!\n";
 
   // destructor of Cppsched::Scheduler will cancel all schedules but finish any
   // tasks currently running
-  std::this_thread::sleep_for(std::chrono::minutes(10));
-
   return 0;
 }
