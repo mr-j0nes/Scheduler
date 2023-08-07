@@ -45,7 +45,7 @@ Cppsched::Scheduler scheduler(4);
 // Schedule a task to run every 5 seconds
 scheduler.every("Task1", std::chrono::seconds(5), []() {
     // Your task code here
-    // This task will be executed every 5 seconds
+    // This task will be executed every 5 seconds, starting in 5 seconds
 });
 
 // Schedule a task to run at a specific time
@@ -61,23 +61,23 @@ scheduler.in("Task3", std::chrono::seconds(8), []() {
 });
 
 // Schedule a task to run with a cron expression
-scheduler.cron("Task4", "*/5 * * * * *", []() {
+scheduler.cron("Task4", "0 */5 * * * *", []() {
     // Your task code here
-    // This task will be executed every 5 minutes
+    // This task will be executed every 5 minutes, starting at the next minute that is module of 5
 });
 
 // Schedule a task to run at intervals without concurrency
 scheduler.interval("Task5", std::chrono::seconds(10), []() {
     // Your task code here
-    // This task will be executed every 10 seconds, and no multiple instances will run concurrently
+    // This task will be executed every 10 seconds, starting in 10 seconds, and no multiple instances will run concurrently
 });
 
 // Enable or disable tasks dynamically during runtime
-scheduler.disable_task("Task1");
-scheduler.enable_task("Task1");
+bool d = scheduler.disable_task("Task1");
+bool e = scheduler.enable_task("Task1");
 
 // Remove tasks
-scheduler.remove_task("Task1");
+bool r = scheduler.remove_task("Task1");
 ```
 
 **Note**: The difference between `interval` and `every` is that multiple instances of a task scheduled with `interval` will never be run concurrently, ensuring that the task is always completed before the next execution. On the other hand, tasks scheduled with `every` will run at the specified interval regardless of the completion time of the previous instance.
