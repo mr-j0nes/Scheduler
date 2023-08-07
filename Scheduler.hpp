@@ -68,6 +68,7 @@ namespace Cppsched {
         bool recur;
         bool interval;
         bool enabled;           // Flag to indicate if the task is enabled
+        bool removed {false};   // Flag to indicate if the task is removed. Helps dealing with interval removal.
     };
 
     class InTask : public Task {
@@ -283,25 +284,29 @@ namespace Cppsched {
           std::string time_str {"interval: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...), true);
-          add_task(task_id, Clock::now(), std::move(t));
+          auto next_time = t->get_new_time();
+          add_task(task_id, next_time, std::move(t));
         }
 
         // Method to remove a task by ID or name
-        void remove_task(const std::string& task_id)
+        bool remove_task(const std::string& task_id)
         {
           std::lock_guard<std::mutex> l(lock);
 
           // Find the task in the tasks_map
           auto task_iterator = tasks_map.find(task_id);
           if (task_iterator != tasks_map.end()) {
-            // Erase the task from both tasks_map and tasks multimap
-            tasks.erase(task_iterator->second);
+            task_iterator->second->second->removed = true;;
             tasks_map.erase(task_iterator);
+
+            return true;
           }
+
+          return false;
         }
 
         // Method to disable a task by ID or name
-        void disable_task(const std::string& task_id)
+        bool disable_task(const std::string& task_id)
         {
           std::lock_guard<std::mutex> l(lock);
 
@@ -310,11 +315,15 @@ namespace Cppsched {
           if (task_iterator != tasks_map.end()) {
             // Enable the task
             task_iterator->second->second->enabled = false;
+
+            return true;
           }
+
+          return false;
         }
 
         // Method to enable a task by ID or name
-        void enable_task(const std::string& task_id)
+        bool enable_task(const std::string& task_id)
         {
           std::lock_guard<std::mutex> l(lock);
 
@@ -323,7 +332,11 @@ namespace Cppsched {
           if (task_iterator != tasks_map.end()) {
             // Disable the task
             task_iterator->second->second->enabled = true;
+            
+            return true;
           }
+
+          return false;
         }
 
         std::vector<TaskReport> get_tasks_list() 
@@ -389,11 +402,14 @@ namespace Cppsched {
 
               auto &task = (*i).second;
 
+              if (task->removed)
+                continue;
+
               if (task->interval) {
                 // if it's an interval task, only add the task back after f() is completed
                 if (task->enabled) {
 
-                  // Temrporarily save task until completed
+                  // Temporarily save task until completed
                   auto inserted_task = completed_interval_tasks.insert(*i);
                   tasks_map[task->id] = inserted_task;
 
@@ -405,6 +421,10 @@ namespace Cppsched {
                       add_task(task->get_new_time(), task);
                       completed_interval_tasks.erase(inserted_task);
                       });
+                }
+                else
+                {
+                  recurred_tasks.emplace(task->get_new_time(), std::move(task));
                 }
               } else {
                 if (task->enabled) {
@@ -428,7 +448,10 @@ namespace Cppsched {
 
             // re-add the tasks that are recurring
             for (auto &task_pair : recurred_tasks)
-              tasks.emplace(task_pair.first, std::move(task_pair.second));
+            {
+              if (! task_pair.second->removed)
+                tasks.emplace(task_pair.first, std::move(task_pair.second));
+            }
 
             // remove from tasks_map
             for (auto &task: non_recurred_tasks) {

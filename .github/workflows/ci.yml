@@ -18,4 +18,8 @@ jobs:
     - name: Test
       run: |
         cd build
+        make test
+    - name: Example
+      run: |
+        cd build
         ./example
