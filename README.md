@@ -4,11 +4,11 @@ Scheduler is an improved fork of the original [Bosma repository](https://github.
 
 ## Differences with the original
 
-- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
-- Namespace changed
-- Naming convention changed
 - Supported enabling/disabling/removing tasks
 - Tasks should be added with a unique Id (task name)
+- Added test suite
+- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
+- Namespace changed
 
 ## Features
 
