@@ -828,3 +828,37 @@ TEST_F(SchedulerTest, Scheduler_multithreading)
     EXPECT_NO_THROW(d.get());
     EXPECT_NO_THROW(e.get());
 }
+
+TEST_F(SchedulerTest, Scheduler_get_tasks_list)
+{
+    std::vector<Cppsched::TaskReport> task_report;
+    std::vector<Cppsched::TaskReport>::iterator task_report_it;
+    Clock::time_point time; 
+    time = Clock::now() + std::chrono::seconds(10);
+
+    s.every("every1", time_until_task, f);
+    s.interval("interval1", time_until_task, f);
+    s.at("at1", time, f);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    EXPECT_NO_THROW(task_report = s.get_tasks_list());
+
+    task_report_it = task_report.begin();
+
+    ASSERT_NE(task_report_it, task_report.end());
+    EXPECT_EQ(task_report_it->id, "at1");
+    EXPECT_EQ(task_report_it->enabled, true);
+
+    ++ task_report_it;
+
+    ASSERT_NE(task_report_it, task_report.end());
+    EXPECT_EQ(task_report_it->id, "every1");
+    EXPECT_EQ(task_report_it->enabled, true);
+
+    ++ task_report_it;
+
+    ASSERT_NE(task_report_it, task_report.end());
+    EXPECT_EQ(task_report_it->id, "interval1");
+    EXPECT_EQ(task_report_it->enabled, true);
+}

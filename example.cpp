@@ -98,7 +98,7 @@ int main() {
       {
         for (const auto &task : s.get_tasks_list())
         {
-          std::cout << "-> Task Id: <" << task.id << "> 	trigger: <" << task.time_str << ">	enabled: <" << task.enabled << ">\n";
+          std::cout << "-> Task Id: <" << task.id << "> 	trigger: <" << task.time_str << ">	next run: <" << task.next_run_str << ">	enabled: <" << task.enabled << ">\n";
         }
 
         std::this_thread::sleep_for(std::chrono::seconds(15) + std::chrono::milliseconds(500));

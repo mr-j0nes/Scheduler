@@ -46,11 +46,12 @@ namespace Cppsched {
     };
 
     struct TaskReport {
-      TaskReport( std::string id, std::string time_str, bool enabled): id(id), time_str(time_str), enabled(enabled)
+      TaskReport( std::string id, std::string time_str, std::string next_run_str, bool enabled): id(id), time_str(time_str), next_run_str(next_run_str), enabled(enabled)
       {}
 
       std::string id;
       std::string time_str;
+      std::string next_run_str;
       bool enabled;
     };
 
@@ -311,10 +312,12 @@ namespace Cppsched {
           std::lock_guard<std::mutex> l(lock);
 
           // Find the task in the tasks_map
-          auto task_iterator = tasks_map.find(task_id);
-          if (task_iterator != tasks_map.end()) {
-            // Enable the task
-            task_iterator->second->second->enabled = false;
+          auto task_map_iterator = tasks_map.find(task_id);
+          if (task_map_iterator != tasks_map.end()) {
+            // Disable the task
+            auto &task_pair {task_map_iterator->second};
+            auto &task {task_pair->second};
+            task->enabled = false;
 
             return true;
           }
@@ -328,10 +331,12 @@ namespace Cppsched {
           std::lock_guard<std::mutex> l(lock);
 
           // Find the task in the tasks_map
-          auto task_iterator = tasks_map.find(task_id);
-          if (task_iterator != tasks_map.end()) {
-            // Disable the task
-            task_iterator->second->second->enabled = true;
+          auto task_map_iterator = tasks_map.find(task_id);
+          if (task_map_iterator != tasks_map.end()) {
+            // Enable the task
+            auto &task_pair {task_map_iterator->second};
+            auto &task {task_pair->second};
+            task->enabled = true;
             
             return true;
           }
@@ -347,8 +352,13 @@ namespace Cppsched {
             std::lock_guard<std::mutex> l(lock);
             for (auto &map_pair : tasks_map)
             {
-              auto &task {map_pair.second->second};
-              v.push_back(TaskReport(task->id, task->time_str, task->enabled));
+              auto &task_pair {map_pair.second};
+              auto &task {task_pair->second};
+              auto next_run {task->get_new_time()};
+              // We'll have next_run precission of just 1 sec for now, we might
+              // increase this in the future if needed. We just need to figure
+              // out how.
+              v.push_back(TaskReport(task->id, task->time_str, format_time_point("%F %T %z", next_run), task->enabled));
             }
           }
 
@@ -401,13 +411,9 @@ namespace Cppsched {
             for (auto i = tasks.begin(); i != end_of_tasks_to_run; ++i) {
 
               auto &task = (*i).second;
-
-              if (task->removed)
-                continue;
-
               if (task->interval) {
                 // if it's an interval task, only add the task back after f() is completed
-                if (task->enabled) {
+                if (task->enabled && ! task->removed) {
 
                   // Temporarily save task until completed
                   auto inserted_task = completed_interval_tasks.insert(*i);
@@ -427,7 +433,7 @@ namespace Cppsched {
                   recurred_tasks.emplace(task->get_new_time(), std::move(task));
                 }
               } else {
-                if (task->enabled) {
+                if (task->enabled && ! task->removed) {
                   threads.push([task](int) {
                       task->f();
                       });
@@ -450,7 +456,14 @@ namespace Cppsched {
             for (auto &task_pair : recurred_tasks)
             {
               if (! task_pair.second->removed)
-                tasks.emplace(task_pair.first, std::move(task_pair.second));
+              {
+                // tasks.emplace(task_pair.first, std::move(task_pair.second));
+                auto &time {task_pair.first};
+                auto &task {task_pair.second};
+                const std::string &task_id {task->id};
+                auto inserted_task = tasks.emplace(time, std::move(task));
+                tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
+              }
             }
 
             // remove from tasks_map
