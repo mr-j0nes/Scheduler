@@ -175,7 +175,7 @@ TEST_F(SchedulerTest, Scheduler_enable_notExist)
     EXPECT_FALSE(s.enable_task("Blah blah"));
 }
 
-TEST_F(SchedulerTest, Scueduler_remove_notExist)
+TEST_F(SchedulerTest, Scheduler_remove_notExist)
 {
     EXPECT_FALSE(s.remove_task("Blah blah"));
 }
@@ -279,7 +279,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     Clock::time_point time; 
     std::string expression;
     std::string expression_now;
-    auto onesec {std::chrono::seconds(1)};
+    auto one_second {std::chrono::seconds(1)};
 
     // Expression cannot represent milliseconds, so, we have to deal with minimum 1 second
 
@@ -295,46 +295,46 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     }
 
     // Handles in right time
-    time = Clock::now() + (onesec * 2);
+    time = Clock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     expression_now = format_time_point("%F %T", Clock::now());
     done = false;
     s.at(taskId, expression, f);
     std::this_thread::sleep_for(delay);
-    std::this_thread::sleep_for(onesec);
+    std::this_thread::sleep_for(one_second);
     EXPECT_FALSE(done) << expression << " " << expression_now;
-    std::this_thread::sleep_for(onesec);
+    std::this_thread::sleep_for(one_second);
     EXPECT_TRUE(done) << expression << " " << expression_now;
 
     // No exceptions
-    time = Clock::now() + (onesec * 2);
+    time = Clock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f_except);
     std::this_thread::sleep_for(delay);
-    std::this_thread::sleep_for(onesec * 2);
+    std::this_thread::sleep_for(one_second * 2);
     EXPECT_FALSE(done);
 
     // Disable task
-    time = Clock::now() + (onesec * 2);
+    time = Clock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f);
     std::this_thread::sleep_for(delay);
-    std::this_thread::sleep_for(onesec);
+    std::this_thread::sleep_for(one_second);
     EXPECT_TRUE(s.disable_task(taskId));
-    std::this_thread::sleep_for(onesec);
+    std::this_thread::sleep_for(one_second);
     EXPECT_FALSE(done);
 
     // Remove task
-    time = Clock::now() + (onesec * 2);
+    time = Clock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f);
     std::this_thread::sleep_for(delay);
-    std::this_thread::sleep_for(onesec);
+    std::this_thread::sleep_for(one_second);
     EXPECT_TRUE(s.remove_task(taskId));
-    std::this_thread::sleep_for(onesec);
+    std::this_thread::sleep_for(one_second);
     EXPECT_FALSE(done);
 }
 
@@ -364,14 +364,14 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
                                                                     // Here task 1st launch
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 125ms
     EXPECT_EQ(result, 0);                                           // Result not changed
-    std::this_thread::sleep_for(task_duration /2);                  // Wait til 150ms + a bit
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 150ms
     EXPECT_EQ(result, 1);                                           // Result changed
     result = 0;
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 200ms
                                                                     // Here task 2nd launch
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 225ms
     EXPECT_EQ(result, 0);                                           // Result not changed
-    std::this_thread::sleep_for(task_duration /2);                  // Wait til 250ms + a bit
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 250ms
     EXPECT_EQ(result, 1);                                           // Result changed
 
     // Disable task
@@ -379,7 +379,7 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     EXPECT_TRUE(s.disable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 300ms
                                                                     // Here task 3rd launch but no run
-    std::this_thread::sleep_for(task_duration);                     // Wait til 350ms + a bit
+    std::this_thread::sleep_for(task_duration);                     // Wait til 350ms
     EXPECT_EQ(result, 0);                                           // Result should not be changed
 
     // Enable task
@@ -387,7 +387,7 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     EXPECT_TRUE(s.enable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 400ms
                                                                     // Here task 4th launch
-    std::this_thread::sleep_for(task_duration);                     // Wait til 450ms + a bit
+    std::this_thread::sleep_for(task_duration);                     // Wait til 450ms
     EXPECT_EQ(result, 1);                                           // Result is changed
 
     // Remove task
@@ -827,4 +827,38 @@ TEST_F(SchedulerTest, Scheduler_multithreading)
     EXPECT_NO_THROW(c.get());
     EXPECT_NO_THROW(d.get());
     EXPECT_NO_THROW(e.get());
+}
+
+TEST_F(SchedulerTest, Scheduler_get_tasks_list)
+{
+    std::vector<Cppsched::TaskReport> task_report;
+    std::vector<Cppsched::TaskReport>::iterator task_report_it;
+    Clock::time_point time; 
+    time = Clock::now() + std::chrono::seconds(10);
+
+    s.every("every1", time_until_task, f);
+    s.interval("interval1", time_until_task, f);
+    s.at("at1", time, f);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    EXPECT_NO_THROW(task_report = s.get_tasks_list());
+
+    task_report_it = task_report.begin();
+
+    ASSERT_NE(task_report_it, task_report.end());
+    EXPECT_EQ(task_report_it->id, "at1");
+    EXPECT_EQ(task_report_it->enabled, true);
+
+    ++ task_report_it;
+
+    ASSERT_NE(task_report_it, task_report.end());
+    EXPECT_EQ(task_report_it->id, "every1");
+    EXPECT_EQ(task_report_it->enabled, true);
+
+    ++ task_report_it;
+
+    ASSERT_NE(task_report_it, task_report.end());
+    EXPECT_EQ(task_report_it->id, "interval1");
+    EXPECT_EQ(task_report_it->enabled, true);
 }

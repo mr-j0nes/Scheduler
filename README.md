@@ -4,11 +4,11 @@ Scheduler is an improved fork of the original [Bosma repository](https://github.
 
 ## Differences with the original
 
-- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
-- Namespace changed
-- Naming convention changed
 - Supported enabling/disabling/removing tasks
 - Tasks should be added with a unique Id (task name)
+- Added test suite
+- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
+- Namespace changed
 
 ## Features
 
@@ -63,13 +63,15 @@ scheduler.in("Task3", std::chrono::seconds(8), []() {
 // Schedule a task to run with a cron expression
 scheduler.cron("Task4", "0 */5 * * * *", []() {
     // Your task code here
-    // This task will be executed every 5 minutes, starting at the next minute that is module of 5
+    // This task will be executed every 5 minutes, 
+    // starting at the next minute that is module of 5
 });
 
 // Schedule a task to run at intervals without concurrency
 scheduler.interval("Task5", std::chrono::seconds(10), []() {
     // Your task code here
-    // This task will be executed every 10 seconds, starting in 10 seconds, and no multiple instances will run concurrently
+    // This task will be executed every 10 seconds, 
+    // starting in 10 seconds, and no multiple instances will run concurrently
 });
 
 // Enable or disable tasks dynamically during runtime
