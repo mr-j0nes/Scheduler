@@ -1,4 +1,13 @@
-# 0.2.0 (2023-08-16)
+## [0.2.1](https://github.com/mr-j0nes/Scheduler/compare/v0.2.0...v0.2.1) (2023-08-17)
+
+
+### Bug Fixes
+
+* fix warnings on C++17 ([692eae7](https://github.com/mr-j0nes/Scheduler/commit/692eae779a5587f84af81c95c6ef9a3379a8f729))
+
+
+
+# [0.2.0](https://github.com/mr-j0nes/Scheduler/compare/b13e17fcf11af83eb00fe8505dd26af47aa1ebe4...v0.2.0) (2023-08-16)
 
 
 ### Bug Fixes
