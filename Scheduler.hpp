@@ -112,7 +112,6 @@ namespace Cppsched {
             {
                 auto cron = cron::make_cron(exp);
 
-                std::time_t now = std::time(0);
                 next = cron::cron_next(cron, Clock::now());
             }
             catch (cron::bad_cronexpr const & e)
@@ -362,7 +361,7 @@ namespace Cppsched {
             }
           }
 
-          return std::move(v);
+          return v;
         }
 
     private:
