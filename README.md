@@ -1,4 +1,4 @@
-# Scheduler C++ Library ![Test](https://github.com/mr-j0nes/Scheduler/actions/workflows/ci.yml/badge.svg)
+# Scheduler C++ Library [![Tests](https://github.com/mr-j0nes/Scheduler/actions/workflows/test.yml/badge.svg)](https://github.com/mr-j0nes/Scheduler/actions/workflows/test.yml) [![Releases](https://github.com/mr-j0nes/Scheduler/actions/workflows/release.yml/badge.svg)](https://github.com/mr-j0nes/Scheduler/actions/workflows/release.yml)
 
 Scheduler is an improved fork of the original [Bosma repository](https://github.com/Bosma/Scheduler), providing a simple and flexible task scheduling framework for C++. The library allows you to schedule tasks to run at specific intervals, specific times, or based on cron expressions. You can also enable or disable tasks dynamically during runtime, as well as removing them via their Id.
 
