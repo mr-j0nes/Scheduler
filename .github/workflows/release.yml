@@ -5,7 +5,7 @@ on:
       - master
 
 jobs:
-  changelog:
+  Release:
     if: github.repository == 'mr-j0nes/Scheduler'
     runs-on: ubuntu-latest
 
