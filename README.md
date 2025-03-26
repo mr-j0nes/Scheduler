@@ -46,6 +46,7 @@ Cppsched::Scheduler scheduler(4);
 scheduler.every("Task1", std::chrono::seconds(5), []() {
     // Your task code here
     // This task will be executed every 5 seconds, starting in 5 seconds
+    // and tasks will run concurrently if previous ones have not finished
 });
 
 // Schedule a task to run at a specific time
@@ -71,7 +72,7 @@ scheduler.cron("Task4", "0 */5 * * * *", []() {
 scheduler.interval("Task5", std::chrono::seconds(10), []() {
     // Your task code here
     // This task will be executed every 10 seconds, 
-    // starting in 10 seconds, and no multiple instances will run concurrently
+    // starting now, and no multiple instances will run concurrently
 });
 
 // Enable or disable tasks dynamically during runtime

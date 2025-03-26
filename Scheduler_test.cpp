@@ -1,7 +1,9 @@
-#include <chrono>
-#include <cstdlib>
 #include <gtest/gtest.h>
-#include <iterator>
+
+#include <chrono>
+#include <vector>
+#include <string>
+#include <cstdlib>
 #include <stdexcept>
 #include <thread>
 
@@ -21,7 +23,6 @@ inline std::string format_time_point(const std::string &format, const Clock::tim
     }
 
     return std::string(buffer);
-
 }
 
 class SchedulerTest : public testing::Test
@@ -29,15 +30,17 @@ class SchedulerTest : public testing::Test
 protected:
     std::string taskId {"testId"};
     Cppsched::Scheduler s;
-    Clock::duration time_until_task {std::chrono::milliseconds(100)};
-    Clock::duration task_duration {std::chrono::milliseconds(100)};
-    Clock::duration delay {std::chrono::milliseconds(5)};
+    Clock::duration d_100ms {std::chrono::milliseconds(100)};
+    Clock::duration d_50ms {std::chrono::milliseconds(50)};
+    Clock::duration d_5ms {std::chrono::milliseconds(5)};
+    Clock::duration time_until_task {d_100ms};
+    Clock::duration task_duration {d_100ms};
     std::atomic<int> result {0};
     std::atomic<bool> done {false};
-    std::function<void()> f; 
-    std::function<void()> f_except; 
+    std::function<void()> f;
+    std::function<void()> f_except;
 
-    SchedulerTest() : 
+    SchedulerTest() :
         f([this](){std::this_thread::sleep_for(task_duration); done = true; ++result;}),
         f_except([this](){throw std::runtime_error("exception");})
     {
@@ -117,7 +120,7 @@ TEST_F(SchedulerTest, InterruptableSleep)
     // sleep_for
     done = false;
     threads.push([&is, &done](int){
-            is.sleep_for(std::chrono::milliseconds(100)); 
+            is.sleep_for(std::chrono::milliseconds(100));
             done = true;
             });
 
@@ -134,7 +137,7 @@ TEST_F(SchedulerTest, InterruptableSleep)
     // sleep_until
     done = false;
     threads.push([&is, &done](int){
-            is.sleep_until(Clock::now() + std::chrono::milliseconds(100)); 
+            is.sleep_until(Clock::now() + std::chrono::milliseconds(100));
             done = true;
             });
 
@@ -182,11 +185,10 @@ TEST_F(SchedulerTest, Scheduler_remove_notExist)
 
 TEST_F(SchedulerTest, Scheduler_in)
 {
-
     // Handles in right time
     done = false;
     s.in(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task);
     std::this_thread::sleep_for(task_duration /2);
     EXPECT_FALSE(done);
@@ -196,7 +198,7 @@ TEST_F(SchedulerTest, Scheduler_in)
     // No exceptions
     done = false;
     s.in(taskId, time_until_task, f_except);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task);
     std::this_thread::sleep_for(task_duration);
     EXPECT_FALSE(done);
@@ -204,7 +206,7 @@ TEST_F(SchedulerTest, Scheduler_in)
     // Disable task
     done = false;
     s.in(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task /2);
     EXPECT_TRUE(s.disable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);
@@ -214,7 +216,7 @@ TEST_F(SchedulerTest, Scheduler_in)
     // Remove task
     done = false;
     s.in(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task /2);
     EXPECT_TRUE(s.remove_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);
@@ -224,7 +226,7 @@ TEST_F(SchedulerTest, Scheduler_in)
 
 TEST_F(SchedulerTest, Scheduler_at)
 {
-    Clock::time_point time; 
+    Clock::time_point time;
     std::string expression;
 
     // Handles in right time
@@ -232,7 +234,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task);
     std::this_thread::sleep_for(task_duration /2);
     EXPECT_FALSE(done);
@@ -244,7 +246,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f_except);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task);
     std::this_thread::sleep_for(task_duration);
     EXPECT_FALSE(done);
@@ -254,7 +256,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task /2);
     EXPECT_TRUE(s.disable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);
@@ -266,7 +268,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(time_until_task /2);
     EXPECT_TRUE(s.remove_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);
@@ -276,7 +278,7 @@ TEST_F(SchedulerTest, Scheduler_at)
 
 TEST_F(SchedulerTest, Scheduler_at_with_expression)
 {
-    Clock::time_point time; 
+    Clock::time_point time;
     std::string expression;
     std::string expression_now;
     auto one_second {std::chrono::seconds(1)};
@@ -289,8 +291,8 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
         const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
-        const long long durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
-        if (int(durMs - durS * 1000) > 950)
+        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+        if (static_cast<int>(durMs - durS * 1000) > 950)
             break;
     }
 
@@ -300,7 +302,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     expression_now = format_time_point("%F %T", Clock::now());
     done = false;
     s.at(taskId, expression, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(one_second);
     EXPECT_FALSE(done) << expression << " " << expression_now;
     std::this_thread::sleep_for(one_second);
@@ -311,7 +313,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f_except);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(one_second * 2);
     EXPECT_FALSE(done);
 
@@ -320,7 +322,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(one_second);
     EXPECT_TRUE(s.disable_task(taskId));
     std::this_thread::sleep_for(one_second);
@@ -331,7 +333,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(one_second);
     EXPECT_TRUE(s.remove_task(taskId));
     std::this_thread::sleep_for(one_second);
@@ -348,9 +350,9 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     //
     //           Now                 100ms                 200ms                 300ms            (Task triggered)
     // Scheduler |--------------------|---------------------|---------------------|-----------
-    // Task 1st  |--------------------|==========|----------|---------------------------------
-    // Task 2nd  |------------------------------------------|==========|----------------------
-    // Task 3rd  |----------------------------------------------------------------|==========|
+    // 1st Task  |--------------------|==========|----------|---------------------------------
+    // 2nd Task  |------------------------------------------|==========|----------------------
+    // 3rd Task  |----------------------------------------------------------------|==========|
     //                                          50ms                  50ms                  50ms  (Task end)
 
     // Make sure task duration is half time a loop
@@ -359,16 +361,16 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     // Handles in right time
     result = 0;
     s.every(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);                             // Delay a bit
+    std::this_thread::sleep_for(d_5ms);                             // Delay a bit
     std::this_thread::sleep_for(time_until_task);                   // Wait til 100ms
-                                                                    // Here task 1st launch
+                                                                    // Here 1st task launched
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 125ms
     EXPECT_EQ(result, 0);                                           // Result not changed
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 150ms
     EXPECT_EQ(result, 1);                                           // Result changed
     result = 0;
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 200ms
-                                                                    // Here task 2nd launch
+                                                                    // Here 2nd task launched
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 225ms
     EXPECT_EQ(result, 0);                                           // Result not changed
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 250ms
@@ -378,7 +380,7 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     result = 0;
     EXPECT_TRUE(s.disable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 300ms
-                                                                    // Here task 3rd launch but no run
+                                                                    // Here 3rd task launched but no run
     std::this_thread::sleep_for(task_duration);                     // Wait til 350ms
     EXPECT_EQ(result, 0);                                           // Result should not be changed
 
@@ -386,7 +388,7 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     result = 0;
     EXPECT_TRUE(s.enable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 400ms
-                                                                    // Here task 4th launch
+                                                                    // Here 4th task launched
     std::this_thread::sleep_for(task_duration);                     // Wait til 450ms
     EXPECT_EQ(result, 1);                                           // Result is changed
 
@@ -402,7 +404,6 @@ TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
     s.every(taskId, task_duration, f_except);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
-
 }
 
 TEST_F(SchedulerTest, Scheduler_every_with_concurrency)
@@ -415,9 +416,9 @@ TEST_F(SchedulerTest, Scheduler_every_with_concurrency)
     //
     //           Now      100ms      200ms      300ms     400ms      500ms      600ms    (Task triggered)
     // Scheduler |---------|----------|----------|---------|----------|----------|
-    // Task 1st  |---------|================|-------------------------------------
-    // Task 2nd  |--------------------|===============|---------------------------
-    // Task 3rd  |-------------------------------|===============|----------------
+    // 1st Task  |---------|================|-------------------------------------
+    // 2nd Task  |--------------------|===============|---------------------------
+    // 3rd Task  |-------------------------------|===============|----------------
 
     // Make sure task duration is one and half time a loop
     task_duration = time_until_task + (time_until_task / 2);
@@ -425,48 +426,48 @@ TEST_F(SchedulerTest, Scheduler_every_with_concurrency)
     // Handles in right time
     result = 0;
     s.every(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);                             // Delay a bit
+    std::this_thread::sleep_for(d_5ms);                             // Delay a bit
 
     std::this_thread::sleep_for(time_until_task);                   // Wait til 100ms
-                                                                    // Here task 1st launch             +
+                                                                    // Here 1st task launched           +
     std::this_thread::sleep_for(time_until_task);                   // Wait til 200ms                   |
-                                                                    // Here task 2nd launch             | +
+                                                                    // Here 2nd task launched           | +
     EXPECT_EQ(result, 0);                                           // Result not changed               | |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 250ms                   | |
-                                                                    // Here task 1st ended              + |
+                                                                    // Here 1st task ended              + |
     EXPECT_EQ(result, 1);                                           // Result changed                     |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 300ms                     |
-                                                                    // Here task 3rd launch               | +
+                                                                    // Here 3rd task launched             | +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 350ms                     | |
-                                                                    // Here task 2nd ended                + |
+                                                                    // Here 2nd task ended                + |
     EXPECT_EQ(result, 2);                                           // Result changed                       |
                                                                     //                                      |
     // Disable task                                                 //                                      |
     EXPECT_TRUE(s.disable_task(taskId));                            // DISABLED                             |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 400ms                       |
-                                                                    // Here task 4th launch not run         | +
+                                                                    // Here 4th task launched not run         | +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 450ms                       | x
-                                                                    // Here task 2nd ended                  + x
+                                                                    // Here 2nd task ended                  + x
     EXPECT_EQ(result, 3);                                           // Result changed                         x
                                                                     //                                        x
     // Enable task                                                  //                                        x
     EXPECT_TRUE(s.enable_task(taskId));                             // ENABLED                                x
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 500ms                         x
-                                                                    // Here task 5th launch                   x +
+                                                                    // Here 5th task launched                 x +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 550ms                         x |
-                                                                    // Here task 4th would have ended         + |
+                                                                    // Here 4th task would have ended         + |
     EXPECT_EQ(result, 3);                                           // Result is NOT changed                    |
-                                                                    //                                          | 
+                                                                    //                                          |
     // Remove task                                                  //                                          |
     EXPECT_TRUE(s.remove_task(taskId));                             // REMOVED                                  |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 600ms                           |
-                                                                    // Here task 6th launched not run           | +
+                                                                    // Here 6th task launched not run           | +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 650ms                           | x
-                                                                    // Here task 5th ended                      + x
+                                                                    // Here 5th task ended                      + x
     EXPECT_EQ(result, 4);                                           // Result is changed                          x
                                                                     //                                            x
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 750ms                             x
-                                                                    // Here task 5th would have ended             +
+                                                                    // Here 5th task would have ended             +
     EXPECT_EQ(result, 4);                                           // Result is NOT changed
 
     // No exceptions
@@ -474,7 +475,6 @@ TEST_F(SchedulerTest, Scheduler_every_with_concurrency)
     s.every(taskId, task_duration, f_except);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
-
 }
 
 TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
@@ -487,9 +487,9 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
     //
     //           Now                  1s                    2s                    3s              (Task triggered)
     // Scheduler |--------------------|---------------------|---------------------|-----------
-    // Task 1st  |--------------------|==========|----------|---------------------------------
-    // Task 2nd  |------------------------------------------|==========|----------------------
-    // Task 3rd  |----------------------------------------------------------------|==========|
+    // 1st Task  |--------------------|==========|----------|---------------------------------
+    // 2nd Task  |------------------------------------------|==========|----------------------
+    // 3rd Task  |----------------------------------------------------------------|==========|
     //                                          500ms                 500ms                 500ms  (Task end)
 
     // Make sure loop is one second
@@ -504,8 +504,8 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
         const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
-        const long long durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
-        if (int(durMs - durS * 1000) < 50)
+        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+        if (static_cast<int>(durMs - durS * 1000) < 50)
             break;
     }
 
@@ -513,16 +513,16 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
     result = 0;
 
     s.cron(taskId, "* * * * * *", f);
-    std::this_thread::sleep_for(delay);                             // Delay a bit
+    std::this_thread::sleep_for(d_5ms);                             // Delay a bit
     std::this_thread::sleep_for(time_until_task);                   // Wait til 1s
-                                                                    // Here task 1st launch
+                                                                    // Here 1st task launched
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 1.25s
     EXPECT_EQ(result, 0);                                           // Result not changed
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 1.5s
     EXPECT_EQ(result, 1);                                           // Result changed
     result = 0;
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 2s
-                                                                    // Here task 2nd launch
+                                                                    // Here 2nd task launched
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 2.25s
     EXPECT_EQ(result, 0);                                           // Result not changed
     std::this_thread::sleep_for(task_duration /2);                  // Wait til 2.5s
@@ -532,7 +532,7 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
     result = 0;
     EXPECT_TRUE(s.disable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 3s
-                                                                    // Here task 3rd launch but no run
+                                                                    // Here 3rd task launched but no run
     std::this_thread::sleep_for(task_duration);                     // Wait til 3.5s
     EXPECT_EQ(result, 0);                                           // Result should not be changed
 
@@ -540,7 +540,7 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
     result = 0;
     EXPECT_TRUE(s.enable_task(taskId));
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 4s
-                                                                    // Here task 4th launch
+                                                                    // Here 4th task launched
     std::this_thread::sleep_for(task_duration);                     // Wait til 4.5s
     EXPECT_EQ(result, 1);                                           // Result is changed
 
@@ -556,7 +556,6 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
     s.cron(taskId, "* * * * * *", f_except);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
-
 }
 
 TEST_F(SchedulerTest, Scheduler_cron_with_concurrency)
@@ -569,9 +568,9 @@ TEST_F(SchedulerTest, Scheduler_cron_with_concurrency)
     //
     //           Now       1s         2s         3s        4s         5s         6s      (Task triggered)
     // Scheduler |---------|----------|----------|---------|----------|----------|
-    // Task 1st  |---------|================|-------------------------------------
-    // Task 2nd  |--------------------|===============|---------------------------
-    // Task 3rd  |-------------------------------|===============|----------------
+    // 1st Task  |---------|================|-------------------------------------
+    // 2nd Task  |--------------------|===============|---------------------------
+    // 3rd Task  |-------------------------------|===============|----------------
 
     // Make sure loop is one second
     time_until_task = std::chrono::seconds(1);
@@ -585,56 +584,56 @@ TEST_F(SchedulerTest, Scheduler_cron_with_concurrency)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
         const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
-        const long long durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
-        if (int(durMs - durS * 1000) < 50)
+        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+        if (static_cast<int>(durMs - durS * 1000) < 50)
             break;
     }
 
     // Handles in right time
     result = 0;
     s.cron(taskId, "* * * * * *", f);
-    std::this_thread::sleep_for(delay);                             // Delay a bit
+    std::this_thread::sleep_for(d_5ms);                             // Delay a bit
 
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 1s   
-                                                                    // Here task 1st launch             +
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 1s
+                                                                    // Here 1st task launched           +
     std::this_thread::sleep_for(time_until_task);                   // Wait til 2s                      |
-                                                                    // Here task 2nd launch             | +
+                                                                    // Here 2nd task launched           | +
     EXPECT_EQ(result, 0);                                           // Result not changed               | |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 2.5s                    | |
-                                                                    // Here task 1st ended              + |
+                                                                    // Here 1st task ended              + |
     EXPECT_EQ(result, 1);                                           // Result changed                     |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 3s                        |
-                                                                    // Here task 3rd launch               | +
+                                                                    // Here 3rd task launched             | +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 3.5s                      | |
-                                                                    // Here task 2nd ended                + |
+                                                                    // Here 2nd task ended                + |
     EXPECT_EQ(result, 2);                                           // Result changed                       |
                                                                     //                                      |
     // Disable task                                                 //                                      |
     EXPECT_TRUE(s.disable_task(taskId));                            // DISABLED                             |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 4s                          |
-                                                                    // Here task 4th launch not run         | +
+                                                                    // Here 4th task launched not run       | +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 4.5s                        | x
-                                                                    // Here task 2nd ended                  + x
+                                                                    // Here 2nd task ended                  + x
     EXPECT_EQ(result, 3);                                           // Result changed                         x
                                                                     //                                        x
     // Enable task                                                  //                                        x
     EXPECT_TRUE(s.enable_task(taskId));                             // ENABLED                                x
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 5s                            x
-                                                                    // Here task 5th launch                   x +
+                                                                    // Here 5th task launched                 x +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 5.5s                          x |
-                                                                    // Here task 4th would have ended         + |
+                                                                    // Here 4th task would have ended         + |
     EXPECT_EQ(result, 3);                                           // Result is NOT changed                    |
-                                                                    //                                          | 
+                                                                    //                                          |
     // Remove task                                                  //                                          |
     EXPECT_TRUE(s.remove_task(taskId));                             // REMOVED                                  |
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 6s                              |
-                                                                    // Here task 6th launched not run           | +
+                                                                    // Here 6th task launched not run           | +
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 6.5s                            | x
-                                                                    // Here task 5th ended                      + x
+                                                                    // Here 5th task ended                      + x
     EXPECT_EQ(result, 4);                                           // Result is changed                          x
                                                                     //                                            x
     std::this_thread::sleep_for(time_until_task /2);                // Wait til 7.ts                              x
-                                                                    // Here task 5th would have ended             +
+                                                                    // Here 5th task would have ended             +
     EXPECT_EQ(result, 4);                                           // Result is NOT changed
 
     // No exceptions
@@ -642,150 +641,153 @@ TEST_F(SchedulerTest, Scheduler_cron_with_concurrency)
     s.every(taskId, task_duration, f_except);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
-
 }
 
-TEST_F(SchedulerTest, Scheduler_interval_non_overlapping)
+TEST_F(SchedulerTest, Scheduler_interval_small_task_dur)
 {
     //
-    // Non-overlapping
+    // Small task duraction
     //
 
     // if time_until_task = 100ms and task_duration = 50ms
     // The first task will start at 100ms, it will last 50ms, i.e. it will end
-    // at 150ms and the next task starts 100ms later, i.e.: at 250ms 
+    // at 150ms and the next task starts 100ms later, i.e.: at 250ms
     //
-    //           Now                 100ms      150ms                250ms      300ms       (Task triggered)
-    // Scheduler |--------------------|-------------------------------|---------------------
-    // Task 1st  |--------------------|==========|--------------------|---------------------
-    // Task 2nd  |----------------------------------------------------|==========|----------
-    // Task 3rd  |--------------------------------------------------------------------------
-    //                                          50ms                            50ms        (Task end)
+    //           Now       50ms      100ms     150ms     200ms    250ms      300ms
+    // Scheduler |-------------------|-------------------|-------------------|-------------------|
+    // 1st Task  |=========|---------|-------------------|-------------------|-------------------|
+    // 2nd Task  |-------------------|---------|=========|-------------------|-------------------|
+    // 3rd Task  |-------------------|-------------------|-------------------|=========|---------|
 
     // Make sure task duration is half time of the loop
     task_duration = time_until_task / 2;
 
     // Handles in right time
     result = 0;
-    s.interval(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);                             // Delay a bit
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 100ms
-                                                                    // Here task 1st launch             +
-    std::this_thread::sleep_for(task_duration /2);                  // Wait til 125ms                   |
+    s.interval(taskId, time_until_task, f);                         // Here 1st task launched           +
+    std::this_thread::sleep_for(d_5ms);                             // Delay a bit                      |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 25ms                    |
     EXPECT_EQ(result, 0);                                           // Result not changed               |
-    std::this_thread::sleep_for(task_duration /2);                  // Wait til 150ms                   +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 50ms                    +
     EXPECT_EQ(result, 1);                                           // Result changed
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 150ms
+                                                                    // Here 2nd task launched           +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 175ms                   |
+    EXPECT_EQ(result, 1);                                           // Result not changed               |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 200ms                   +
+    EXPECT_EQ(result, 2);                                           // Result changed
     result = 0;
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 250ms
-                                                                    // Here task 2nd launch             +
-    std::this_thread::sleep_for(task_duration /2);                  // Wait til 275ms                   |
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 300ms
+                                                                    // Here 3rd task launched           +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 325ms                   |
     EXPECT_EQ(result, 0);                                           // Result not changed               |
-    std::this_thread::sleep_for(task_duration /2);                  // Wait til 300ms                   +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 350ms                   +
     EXPECT_EQ(result, 1);                                           // Result changed
 
     // Disable task
     result = 0;
     EXPECT_TRUE(s.disable_task(taskId));
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 400ms
-                                                                    // Here task 3rd launch but no run  +
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 450ms
+                                                                    // Here 4th task launched but no run+
                                                                     //                                  |
-    std::this_thread::sleep_for(task_duration);                     // Wait til 450ms                   +
-    EXPECT_EQ(result, 0);                                           // Result should not be changed        
+    std::this_thread::sleep_for(task_duration);                     // Wait til 500ms                   +
+    EXPECT_EQ(result, 0);                                           // Result should not be changed
 
     // Enable task
     result = 0;
     EXPECT_TRUE(s.enable_task(taskId));
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 500ms (only 50ms cause 
+    std::this_thread::sleep_for(time_until_task /2);                // Wait til 550ms (only 50ms cause
                                                                     // prev task didn't run)
-                                                                    // Here task 4th launch             +
+                                                                    // Here 5th task launched           +
                                                                     //                                  |
-    std::this_thread::sleep_for(task_duration);                     // Wait til 550ms                   +
+    std::this_thread::sleep_for(task_duration);                     // Wait til 600ms                   +
     EXPECT_EQ(result, 1);                                           // Result is changed
 
     // Remove task
     result = 0;
     EXPECT_TRUE(s.remove_task(taskId));
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 700ms
-                                                                    // Here task 5th launch not run     +
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 750ms
+                                                                    // Here 6th task launched not run   +
                                                                     //                                  |
-    std::this_thread::sleep_for(task_duration);                     // Wait til 750ms                   +
+    std::this_thread::sleep_for(task_duration);                     // Wait til 800ms                   +
     EXPECT_EQ(result, 0);                                           // Result is NOT changed
 
     // No exceptions
     result = 0;
     s.interval(taskId, task_duration, f_except);
-    std::this_thread::sleep_for(delay);
+    std::this_thread::sleep_for(d_5ms);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
-
 }
 
-TEST_F(SchedulerTest, Scheduler_interval_with_overlapping)
+TEST_F(SchedulerTest, Scheduler_interval_long_task_dur)
 {
     //
-    // With-overlapping (no concurrency)
+    // Long task duration
     //
 
     // if time_until_task = 100ms and task_duration = 150ms
     // So we start our task as 100ms, after finished at 250ms it is scheduled
     // to run again after 100ms, i.e.: at 350ms
     //
-    //           Now      100ms      200ms      300ms     400ms      500ms      600ms    (Task triggered)
-    // Scheduler |---------|----------|----------|---------|----------|----------|
-    // Task 1st  |---------|================|-------------------------------------
-    // Task 2nd  |------------------------------------|===============|-----------
-    //                                     250ms     350ms      
+    //           Now      100ms      200ms      300ms     400ms      500ms      600ms
+    // Scheduler |---------|---------|---------|---------|---------|---------|---------|
+    // 1st Task  |==============|------------------------------------------------------|
+    // 2nd Task  |------------------------|==============|-----------------------------|
+    // 2nd Task  |-------------------------------------------------|==============|----|
 
     // Make sure task duration is one and half time a loop
     task_duration = time_until_task + (time_until_task / 2);
 
     // Handles in right time
     result = 0;
-    s.interval(taskId, time_until_task, f);
-    std::this_thread::sleep_for(delay);                             // Delay a bit
+    s.interval(taskId, time_until_task, f);                         // Here 1st task launched           +
+    std::this_thread::sleep_for(d_5ms);                             // Delay a bit                      |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 75ms                    |
+    EXPECT_EQ(result, 0);                                           // Result not changed               |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 150ms                   |
+                                                                    // Here 1st task ended              +
+    EXPECT_EQ(result, 1);                                           // Result changed
 
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 100ms
-                                                                    // Here task 1st launch             +
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 200ms                   |
-    EXPECT_EQ(result, 0);                                           // Result not changed               | 
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 250ms                   | 
-                                                                    // Here task 1st ended              + 
-    EXPECT_EQ(result, 1);                                           // Result changed                     
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 350ms                     
-                                                                    // Here task 2nd launch               +
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 450ms                     | 
-    EXPECT_EQ(result, 1);                                           // Result not changed                 | 
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 500ms                     | 
-                                                                    // Here task 2nd ended                + 
-    EXPECT_EQ(result, 2);                                           // Result changed                       
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 250ms
+                                                                    // Here 2nd task launched           +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 325ms                   |
+    EXPECT_EQ(result, 1);                                           // Result not changed               |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 400ms                   |
+                                                                    // Here 2nd task ended              +
+    EXPECT_EQ(result, 2);                                           // Result changed
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 500ms
+                                                                    // Here 3rd task launched           +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 575ms                   |
+    EXPECT_EQ(result, 2);                                           // Result not changed               |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 650ms                   |
+                                                                    // Here 3rd task ended              +
+    EXPECT_EQ(result, 3);                                           // Result changed
 
     // Disable task                                                 //
     EXPECT_TRUE(s.disable_task(taskId));                            // DISABLED
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 600ms                       
-                                                                    // Here task 3rd launch no run          +
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 650ms                       x
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 700ms                       x
-    EXPECT_EQ(result, 2);                                           // Result is NOT changed                x
-                                                                    //                                      +
-    // Enable task                                                  //                                      
-    EXPECT_TRUE(s.enable_task(taskId));                             // ENABLED                              
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 800ms
-                                                                    // Here task 4th launch no run            +
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 850ms                         |
-    EXPECT_EQ(result, 2);                                           // Result is NOT changed                  |
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 950ms                         |
-                                                                    // Here task 4th ended                    +
-    EXPECT_EQ(result, 3);                                           // Result is changed
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 750ms
+                                                                    // Here 4th task launched no run    +
+    std::this_thread::sleep_for(task_duration);                     // Wait til 900ms                   x
+    EXPECT_EQ(result, 3);                                           // Result is NOT changed            x
+                                                                    // Here 4th task should have neded  +
+    // Enable task                                                  //
+    EXPECT_TRUE(s.enable_task(taskId));                             // ENABLED
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 1000ms
+                                                                    // Here 5th task launched           +
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 1075ms                  |
+    EXPECT_EQ(result, 3);                                           // Result is NOT changed            |
+    std::this_thread::sleep_for(task_duration /2);                  // Wait til 1150ms                  |
+                                                                    // Here 5th task ended              +
+    EXPECT_EQ(result, 4);                                           // Result is changed
                                                                     //
     // Remove task                                                  //
     EXPECT_TRUE(s.remove_task(taskId));                             // REMOVED
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 1050ms
-                                                                    // Here task 5th launch no run              +
-    std::this_thread::sleep_for(time_until_task /2);                // Wait til 1100ms                          x 
-    EXPECT_EQ(result, 3);                                           // Result not changed                       x
-    std::this_thread::sleep_for(time_until_task);                   // Wait til 1200ms                          x 
-                                                                    // Here task 5th should have ended          + 
-    EXPECT_EQ(result, 3);                                           // Result is NOT changed                      
+    std::this_thread::sleep_for(time_until_task);                   // Wait til 1250ms
+                                                                    // Here 6th task launched no run    +
+    std::this_thread::sleep_for(task_duration);                     // Wait til 1400ms                  x
+    EXPECT_EQ(result, 4);                                           // Result is NOT changed            x
+                                                                    // Here 6th task should have ended  +
 
 
     // No exceptions
@@ -793,7 +795,6 @@ TEST_F(SchedulerTest, Scheduler_interval_with_overlapping)
     s.interval(taskId, task_duration, f_except);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
-
 }
 
 TEST_F(SchedulerTest, Scheduler_multithreading)
@@ -833,7 +834,7 @@ TEST_F(SchedulerTest, Scheduler_get_tasks_list)
 {
     std::vector<Cppsched::TaskReport> task_report;
     std::vector<Cppsched::TaskReport>::iterator task_report_it;
-    Clock::time_point time; 
+    Clock::time_point time;
     time = Clock::now() + std::chrono::seconds(10);
 
     s.every("every1", time_until_task, f);

@@ -285,7 +285,7 @@ namespace Cppsched {
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...), true);
           auto next_time = t->get_new_time();
-          add_task(task_id, next_time, std::move(t));
+          add_task(task_id, Clock::now(), std::move(t));
         }
 
         // Method to remove a task by ID or name
