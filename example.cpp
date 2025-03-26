@@ -2,6 +2,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <thread>
+#include <string>
 
 #include "Scheduler.hpp"
 
@@ -92,7 +93,7 @@ int main() {
 
 
   // Print all tasks
-  bool done {false}; 
+  bool done {false};
   threads.push([&s, &done](int){
       while(! done)
       {

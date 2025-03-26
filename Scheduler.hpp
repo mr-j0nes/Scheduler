@@ -3,16 +3,18 @@
 #include <chrono>
 #include <iomanip>
 #include <map>
+#include <vector>
 #include <cstring>
-#include <stdexcept>
-#include <map>
+#include <memory>
 #include <ctime>
 #include <utility>
+#include <string>
 
 #include "ctpl_stl.h"
 #include "croncpp.h"
 
 namespace Cppsched {
+
     using Clock = std::chrono::system_clock;
 
     class BadDateFormat : public std::exception {
@@ -106,7 +108,6 @@ namespace Cppsched {
                                                                        exp(std::move(expression)) {}
 
         Clock::time_point get_new_time() const override {
-
             Clock::time_point next;
             try
             {
@@ -131,7 +132,6 @@ namespace Cppsched {
     }
 
     class InterruptableSleep {
-
         using Clock = std::chrono::system_clock;
 
         // InterruptableSleep offers a sleep that can be interrupted by any thread.
@@ -216,7 +216,7 @@ namespace Cppsched {
         template<typename _Callable, typename... _Args>
         void in(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
           std::string time_str {"in: " + format_duration(time)};
-          std::shared_ptr<Task> t = std::make_shared<InTask>(task_id, time_str, 
+          std::shared_ptr<Task> t = std::make_shared<InTask>(task_id, time_str,
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
           add_task(task_id, Clock::now() + time, std::move(t));
         }
@@ -224,7 +224,7 @@ namespace Cppsched {
         template<typename _Callable, typename... _Args>
         void at(const std::string &task_id, const Clock::time_point time, _Callable &&f, _Args &&... args) {
           std::string time_str {"at: " + format_time_point("%F %T %z", time)};
-          std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str, 
+          std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str,
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
           add_task(task_id, time, std::move(t));
         }
@@ -256,7 +256,7 @@ namespace Cppsched {
 
           // std::string time_str {"at: " + time};
           std::string time_str {"at: " + format_time_point("%F %T %z", tp)};
-          std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str, 
+          std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str,
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
           add_task(task_id, tp, std::move(t));
         }
@@ -285,7 +285,7 @@ namespace Cppsched {
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...), true);
           auto next_time = t->get_new_time();
-          add_task(task_id, next_time, std::move(t));
+          add_task(task_id, Clock::now(), std::move(t));
         }
 
         // Method to remove a task by ID or name
@@ -336,14 +336,14 @@ namespace Cppsched {
             auto &task_pair {task_map_iterator->second};
             auto &task {task_pair->second};
             task->enabled = true;
-            
+
             return true;
           }
 
           return false;
         }
 
-        std::vector<TaskReport> get_tasks_list() 
+        std::vector<TaskReport> get_tasks_list()
         {
           std::vector<TaskReport> v;
 
@@ -408,12 +408,10 @@ namespace Cppsched {
 
             // for all tasks that have been triggered
             for (auto i = tasks.begin(); i != end_of_tasks_to_run; ++i) {
-
               auto &task = (*i).second;
               if (task->interval) {
                 // if it's an interval task, only add the task back after f() is completed
                 if (task->enabled && ! task->removed) {
-
                   // Temporarily save task until completed
                   auto inserted_task = completed_interval_tasks.insert(*i);
                   tasks_map[task->id] = inserted_task;
@@ -466,7 +464,7 @@ namespace Cppsched {
             }
 
             // remove from tasks_map
-            for (auto &task: non_recurred_tasks) {
+            for (auto &task : non_recurred_tasks) {
               auto task_map_iterator = tasks_map.find(task->id);
               if (task_map_iterator != tasks_map.end()) {
                 tasks_map.erase(task_map_iterator);
@@ -475,7 +473,7 @@ namespace Cppsched {
           }
         }
 
-        inline std::string format_time_point(const std::string &format, const Clock::time_point date) const 
+        inline std::string format_time_point(const std::string &format, const Clock::time_point date) const
         {
           char       buffer[80] = "";
           std::time_t date_c = std::chrono::system_clock::to_time_t(date);
@@ -487,10 +485,9 @@ namespace Cppsched {
           }
 
           return std::string(buffer);
-
         }
 
-        inline std::string format_duration(std::chrono::nanoseconds timeunit) const 
+        inline std::string format_duration(std::chrono::nanoseconds timeunit) const
         {
           std::chrono::nanoseconds ns =
             std::chrono::duration_cast<std::chrono::nanoseconds>(timeunit);
@@ -574,4 +571,4 @@ namespace Cppsched {
         }
     };
 
-}
+} // namespace Cppsched
