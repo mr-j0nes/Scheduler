@@ -1,3 +1,12 @@
+## [0.2.2](https://github.com/mr-j0nes/Scheduler/compare/v0.2.1...v0.2.2) (2025-03-26)
+
+
+### Bug Fixes
+
+* interval should start right away ([9f45bcf](https://github.com/mr-j0nes/Scheduler/commit/9f45bcfca8b34d7de469c8e5c667b1b9cb24204a)), closes [#9](https://github.com/mr-j0nes/Scheduler/issues/9)
+
+
+
 ## [0.2.1](https://github.com/mr-j0nes/Scheduler/compare/v0.2.0...v0.2.1) (2023-08-17)
 
 
