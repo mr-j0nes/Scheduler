@@ -1,3 +1,12 @@
+# [0.3.0](https://github.com/mr-j0nes/Scheduler/compare/v0.2.2...v0.3.0) (2025-11-12)
+
+
+### Features
+
+* support using own thread pool ([613061e](https://github.com/mr-j0nes/Scheduler/commit/613061e2e181678643344e135ba7e5b745850c81))
+
+
+
 ## [0.2.2](https://github.com/mr-j0nes/Scheduler/compare/v0.2.1...v0.2.2) (2025-03-26)
 
 
