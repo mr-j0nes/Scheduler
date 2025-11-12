@@ -6,6 +6,7 @@ Scheduler is an improved fork of the original [Bosma repository](https://github.
 
 - Supported enabling/disabling/removing tasks
 - Tasks should be added with a unique Id (task name)
+- Supports passing our own thread pool
 - Added test suite
 - Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
 - Namespace changed
@@ -19,12 +20,13 @@ Scheduler is an improved fork of the original [Bosma repository](https://github.
 - Thread-safe task scheduling and management.
 - Lightweight and easy to integrate into your C++ projects.
 - Task report provides a summary of every task: ID, trigger time and whether it's enabled or not.
+- Allows using the thread pool we already use in our application
 
 ## Dependencies
 
 The following dependencies are required for Scheduler:
 
-- [CTPL](https://github.com/vit-vit/CTPL) (C++ Thread Pool Library) [link to CTPL repo]
+- [CTPL](https://github.com/vit-vit/CTPL) (C++ Default Thread Pool Library) [link to CTPL repo]
 - [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
 
 Make sure to install them or to include them directly in your project.
@@ -81,6 +83,42 @@ bool e = scheduler.enable_task("Task1");
 
 // Remove tasks
 bool r = scheduler.remove_task("Task1");
+
+
+// Use own memory pool (CTPL)
+ctpl::thread_pool pool(4); // Our already created thread pool
+
+class MyCtplThreadPool : public Cppsched::ThreadPool {
+public:
+    explicit MyCtplThreadPool(ctpl::thread_pool &pool) : pool(pool) {}
+    void push(std::function<void(int)>&& task) override {
+        pool.push(std::move(task));
+    }
+private:
+    ctpl::thread_pool &pool;
+};
+
+Cppsched::Scheduler schedulerCtpl(std::unique_ptr<MyCtplThreadPool>(new MyCtplThreadPool(pool)));
+
+// Use own memory pool (Boost asio thread pool)
+boost::asio::thread_pool pool(4); // Our already created thread pool
+
+class MyAsioThreadPool : public Cppsched::ThreadPool {
+public:
+    explicit MyAsioThreadPool(boost::asio::thread_pool& pool) : pool(pool) {}
+    
+    void push(std::function<void(int)>&& task) override {
+        // Boost.Asio's post doesn't pass an int, so wrap the task to ignore the int parameter
+        boost::asio::post(pool, [task = std::move(task)]() { // Asio has post() instead of push()
+            task(0); // Pass a dummy int value since the interface expects it
+        });
+    }
+
+private:
+    boost::asio::thread_pool& pool;
+};
+
+Cppsched::Scheduler schedulerAsio(std::unique_ptr<MyAsioThreadPool>(new MyAsioThreadPool(pool)));
 ```
 
 **Note**: The difference between `interval` and `every` is that multiple instances of a task scheduled with `interval` will never be run concurrently, ensuring that the task is always completed before the next execution. On the other hand, tasks scheduled with `every` will run at the specified interval regardless of the completion time of the previous instance.

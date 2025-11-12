@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <utility>
 #include <vector>
 #include <string>
 #include <cstdlib>
@@ -54,6 +55,33 @@ protected:
     {
     }
 };
+
+TEST_F(SchedulerTest, own_MemoryPool)
+{
+    ctpl::thread_pool pool(5);
+
+    class MyThreadPool : public Cppsched::ThreadPool {
+    public:
+        explicit MyThreadPool(ctpl::thread_pool &pool) : pool(pool) {}
+        void push(std::function<void(int)>&& task) override {
+            pool.push(std::move(task));
+        }
+    private:
+        ctpl::thread_pool &pool;
+    };
+
+    Cppsched::Scheduler s(std::unique_ptr<MyThreadPool>(new MyThreadPool(pool)));
+
+    // Handles in right time
+    done = false;
+    s.in(taskId, time_until_task, f);
+    std::this_thread::sleep_for(d_5ms);
+    std::this_thread::sleep_for(time_until_task);
+    std::this_thread::sleep_for(task_duration /2);
+    EXPECT_FALSE(done);
+    std::this_thread::sleep_for(task_duration /2);
+    EXPECT_TRUE (done);
+}
 
 TEST_F(SchedulerTest, InTask_get_new_time)
 {

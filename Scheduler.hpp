@@ -184,10 +184,28 @@ namespace Cppsched {
         std::condition_variable cv;
     };
 
+    class ThreadPool {
+    public:
+        virtual ~ThreadPool() = default;
+        virtual void push(std::function<void(int)>&& task) = 0;
+    };
+
+    class CtplThreadPool : public ThreadPool {
+    public:
+        explicit CtplThreadPool(unsigned int max_n_tasks) : pool(max_n_tasks) {}
+        void push(std::function<void(int)>&& task) override {
+            pool.push(std::move(task));
+        }
+    private:
+        ctpl::thread_pool pool;
+    };
+
     class Scheduler {
     public:
-        explicit Scheduler(unsigned int max_n_tasks = 4) : done(false), threads(max_n_tasks + 1) {
-          threads.push([this](int) {
+        // Constructor with default CTPL thread pool
+        explicit Scheduler(unsigned int max_n_tasks = 4) : done(false),
+          threads(std::unique_ptr<CtplThreadPool>(new CtplThreadPool(max_n_tasks + 1))) {
+          threads->push([this](int) {
               while (!done) {
                 if (tasks.empty()) {
                   sleeper.sleep();
@@ -200,6 +218,21 @@ namespace Cppsched {
           });
         }
 
+        // Constructor accepting user-defined thread pool
+        explicit Scheduler(std::unique_ptr<ThreadPool> thread_pool)
+            : done(false), threads(std::move(thread_pool)) {
+            threads->push([this](int) {
+                while (!done) {
+                    if (tasks.empty()) {
+                        sleeper.sleep();
+                    } else {
+                        auto time_of_first_task = (*tasks.begin()).first;
+                        sleeper.sleep_until(time_of_first_task);
+                    }
+                    manage_tasks();
+                }
+            });
+        }
         Scheduler(const Scheduler &) = delete;
 
         Scheduler(Scheduler &&) noexcept = delete;
@@ -373,7 +406,7 @@ namespace Cppsched {
         std::multimap<Clock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
         std::map<std::string, std::multimap<Clock::time_point, std::shared_ptr<Task>>::iterator> tasks_map;
         std::mutex lock;
-        ctpl::thread_pool threads;
+        std::unique_ptr<ThreadPool> threads;
 
         void add_task(const Clock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
@@ -417,7 +450,7 @@ namespace Cppsched {
                   tasks_map[task->id] = inserted_task;
 
                   // Run
-                  threads.push([this, task, inserted_task](int) {
+                  threads->push([this, task, inserted_task](int) {
                       task->f();
                       // no risk of race-condition,
                       // add_task() will wait for manage_tasks() to release lock
@@ -431,7 +464,7 @@ namespace Cppsched {
                 }
               } else {
                 if (task->enabled && ! task->removed) {
-                  threads.push([task](int) {
+                  threads->push([task](int) {
                       task->f();
                       });
                 }
