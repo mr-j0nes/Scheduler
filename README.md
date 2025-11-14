@@ -85,7 +85,7 @@ bool e = scheduler.enable_task("Task1");
 bool r = scheduler.remove_task("Task1");
 
 
-// Use own memory pool (CTPL)
+// Use own thread pool (CTPL)
 ctpl::thread_pool pool(4); // Our already created thread pool
 
 class MyCtplThreadPool : public Cppsched::ThreadPool {
@@ -100,7 +100,7 @@ private:
 
 Cppsched::Scheduler schedulerCtpl(std::unique_ptr<MyCtplThreadPool>(new MyCtplThreadPool(pool)));
 
-// Use own memory pool (Boost asio thread pool)
+// Use own thread pool (Boost asio thread pool)
 boost::asio::thread_pool pool(4); // Our already created thread pool
 
 class MyAsioThreadPool : public Cppsched::ThreadPool {

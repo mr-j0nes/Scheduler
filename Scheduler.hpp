@@ -317,7 +317,6 @@ namespace Cppsched {
           std::string time_str {"interval: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...), true);
-          auto next_time = t->get_new_time();
           add_task(task_id, Clock::now(), std::move(t));
         }
 
