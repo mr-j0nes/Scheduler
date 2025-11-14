@@ -1,3 +1,12 @@
+## [0.3.1](https://github.com/mr-j0nes/Scheduler/compare/v0.3.0...v0.3.1) (2025-11-14)
+
+
+### Bug Fixes
+
+* fix warning ([94fb37f](https://github.com/mr-j0nes/Scheduler/commit/94fb37fa361d59f5acf0bf4b329bf935db400d9f))
+
+
+
 # [0.3.0](https://github.com/mr-j0nes/Scheduler/compare/v0.2.2...v0.3.0) (2025-11-12)
 
 
