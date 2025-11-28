@@ -4,23 +4,23 @@ Scheduler is an improved fork of the original [Bosma repository](https://github.
 
 ## Differences with the original
 
-- Supported enabling/disabling/removing tasks
-- Tasks should be added with a unique Id (task name)
-- Supports passing our own thread pool
-- Added test suite
-- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++)
-- Namespace changed
+- Supported enabling/disabling/removing tasks.
+- Tasks should be added with a unique Id (task name).
+- Supports passing custom thread pool.
+- Added test suite.
+- Built-in cron was removed in favor of [croncpp](https://github.com/mariusbancila/croncpp) (Cron Expression Parser for C++).
+- Namespace changed.
 
 ## Features
 
-- Header only library
+- Header only library.
 - Schedule tasks to run at specific intervals or times.
 - Support for advance cron-like expressions for task scheduling.
 - Enable or disable tasks during runtime.
 - Thread-safe task scheduling and management.
 - Lightweight and easy to integrate into your C++ projects.
 - Task report provides a summary of every task: ID, trigger time and whether it's enabled or not.
-- Allows using the thread pool we already use in our application
+- Allows using a custom or existing thread pool.
 
 ## Dependencies
 
@@ -94,6 +94,9 @@ public:
     void push(std::function<void(int)>&& task) override {
         pool.push(std::move(task));
     }
+    void stop() override {
+        pool.stop(); // NOTE: Important to stop all our scheduler tasks. Must use a task group!
+    }
 private:
     ctpl::thread_pool &pool;
 };
@@ -114,6 +117,10 @@ public:
         });
     }
 
+    void stop() override {
+        pool.stop(); // NOTE: Important to stop all our scheduler tasks. Must use a task group!
+    }
+
 private:
     boost::asio::thread_pool& pool;
 };
@@ -122,6 +129,39 @@ Cppsched::Scheduler schedulerAsio(std::unique_ptr<MyAsioThreadPool>(new MyAsioTh
 ```
 
 **Note**: The difference between `interval` and `every` is that multiple instances of a task scheduled with `interval` will never be run concurrently, ensuring that the task is always completed before the next execution. On the other hand, tasks scheduled with `every` will run at the specified interval regardless of the completion time of the previous instance.
+
+## Custom thread pool
+
+When integrating `Cppsched::Scheduler` with an existing or custom thread pool (especially one that outlives the scheduler), special care must be taken to ensure proper shutdown and avoid use-after-free bugs.
+
+The main issue arises because the scheduler runs its internal timing loop in a background task submitted to the provided thread pool. If the `Scheduler` object is destroyed while that task is still running (or pending), it may access destroyed members — leading to crashes.
+
+### Recommended Solution: Use a Dedicated Task Group
+
+To safely manage the lifecycle of scheduler-initiated tasks, wrap them in a dedicated **task group** (or equivalent cancellation scope). This allows you to selectively cancel only the scheduler’s tasks during destruction, without affecting other unrelated work in your thread pool.
+
+### Example Implementation
+
+```cpp
+class MyThreadPool : public Cppsched::ThreadPool {
+public:
+    explicit MyThreadPool(my::thread_pool& pool)
+        : pool_(pool), task_group_() {}
+
+    void push(std::function<void(int)>&& task) override {
+        // All tasks submitted by this scheduler will belong to our task_group_
+        pool_.push(task_group_, std::move(task));
+    }
+
+    void stop() override {
+        task_group_.cancel_all();  // Cancels only scheduler-related tasks
+    }
+
+private:
+    my::thread_pool& pool_;
+    my::task_group   task_group_;  // Isolates scheduler tasks for safe cancellation
+};
+```
 
 ## License
 

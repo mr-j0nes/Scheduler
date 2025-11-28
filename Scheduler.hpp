@@ -188,13 +188,17 @@ namespace Cppsched {
     public:
         virtual ~ThreadPool() = default;
         virtual void push(std::function<void(int)>&& task) = 0;
+        virtual void stop() = 0;
     };
 
     class CtplThreadPool : public ThreadPool {
     public:
         explicit CtplThreadPool(unsigned int max_n_tasks) : pool(max_n_tasks) {}
         void push(std::function<void(int)>&& task) override {
-            pool.push(std::move(task));
+          pool.push(std::move(task));
+        }
+        void stop() override {
+          pool.stop();
         }
     private:
         ctpl::thread_pool pool;
@@ -206,32 +210,16 @@ namespace Cppsched {
         explicit Scheduler(unsigned int max_n_tasks = 4) : done(false),
           threads(std::unique_ptr<CtplThreadPool>(new CtplThreadPool(max_n_tasks + 1))) {
           threads->push([this](int) {
-              while (!done) {
-                if (tasks.empty()) {
-                  sleeper.sleep();
-                } else {
-                  auto time_of_first_task = (*tasks.begin()).first;
-                  sleeper.sleep_until(time_of_first_task);
-                }
-                manage_tasks();
-              }
+            run_watcher_loop();
           });
         }
 
         // Constructor accepting user-defined thread pool
         explicit Scheduler(std::unique_ptr<ThreadPool> thread_pool)
-            : done(false), threads(std::move(thread_pool)) {
-            threads->push([this](int) {
-                while (!done) {
-                    if (tasks.empty()) {
-                        sleeper.sleep();
-                    } else {
-                        auto time_of_first_task = (*tasks.begin()).first;
-                        sleeper.sleep_until(time_of_first_task);
-                    }
-                    manage_tasks();
-                }
-            });
+          : done(false), threads(std::move(thread_pool)) {
+          threads->push([this](int) {
+            run_watcher_loop();
+          });
         }
         Scheduler(const Scheduler &) = delete;
 
@@ -244,6 +232,7 @@ namespace Cppsched {
         ~Scheduler() {
           done = true;
           sleeper.interrupt();
+          threads->stop();
         }
 
         template<typename _Callable, typename... _Args>
@@ -413,6 +402,18 @@ namespace Cppsched {
           auto inserted_task = tasks.emplace(time, std::move(t));
           tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
           sleeper.interrupt();
+        }
+
+        void run_watcher_loop() {
+          while (!done) {
+            if (tasks.empty()) {
+              sleeper.sleep();
+            } else {
+              auto time_of_first_task = (*tasks.begin()).first;
+              sleeper.sleep_until(time_of_first_task);
+            }
+            manage_tasks();
+          }
         }
 
         void add_task(const std::string& task_id, const Clock::time_point time, std::shared_ptr<Task> t) {
