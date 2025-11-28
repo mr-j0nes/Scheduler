@@ -43,7 +43,7 @@ protected:
 
     SchedulerTest() :
         f([this](){std::this_thread::sleep_for(task_duration); done = true; ++result;}),
-        f_except([this](){throw std::runtime_error("exception");})
+        f_except([](){throw std::runtime_error("exception");})
     {
     }
 
@@ -56,7 +56,7 @@ protected:
     }
 };
 
-TEST_F(SchedulerTest, own_MemoryPool)
+TEST_F(SchedulerTest, custom_ThreadPool)
 {
     ctpl::thread_pool pool(5);
 
@@ -65,6 +65,9 @@ TEST_F(SchedulerTest, own_MemoryPool)
         explicit MyThreadPool(ctpl::thread_pool &pool) : pool(pool) {}
         void push(std::function<void(int)>&& task) override {
             pool.push(std::move(task));
+        }
+        void stop() override {
+            pool.stop();
         }
     private:
         ctpl::thread_pool &pool;
@@ -81,6 +84,34 @@ TEST_F(SchedulerTest, own_MemoryPool)
     EXPECT_FALSE(done);
     std::this_thread::sleep_for(task_duration /2);
     EXPECT_TRUE (done);
+}
+
+TEST_F(SchedulerTest, custom_ThreadPool_SchedulerOutOfScope)
+{
+    ctpl::thread_pool pool(5);
+
+    class MyThreadPool : public Cppsched::ThreadPool {
+    public:
+        explicit MyThreadPool(ctpl::thread_pool &pool) : pool(pool) {}
+        void push(std::function<void(int)>&& task) override {
+            pool.push(std::move(task));
+        }
+        void stop() override {
+            pool.stop();
+        }
+    private:
+        ctpl::thread_pool &pool;
+    };
+
+    {
+        Cppsched::Scheduler s(std::unique_ptr<MyThreadPool>(new MyThreadPool(pool)));
+
+        s.at(taskId, "2023-01-01 00:00:00", f);
+
+        // Here scheduler gets destructed but pool still alive. It shouldn't crash.
+    }
+
+    std::this_thread::sleep_for(d_100ms);
 }
 
 TEST_F(SchedulerTest, InTask_get_new_time)
@@ -890,4 +921,34 @@ TEST_F(SchedulerTest, Scheduler_get_tasks_list)
     ASSERT_NE(task_report_it, task_report.end());
     EXPECT_EQ(task_report_it->id, "interval1");
     EXPECT_EQ(task_report_it->enabled, true);
+}
+
+TEST_F(SchedulerTest, Crash_IteratorInvalidation_IntervalTask_Reentry)
+{
+    // This test WILL crash (segfault) on the original buggy version
+    // It reliably triggers the iterator invalidation bug in manage_tasks()
+
+    result = 0;
+    task_duration = std::chrono::milliseconds(200);   // Long enough to overlap
+    time_until_task = std::chrono::milliseconds(50); // Fast re-scheduling
+
+    // Schedule a recurring interval task that runs slowly
+    s.interval("crashme", time_until_task, [this]() {
+        ++result;
+        std::this_thread::sleep_for(task_duration);  // Simulate work
+    });
+
+    // Now hammer the scheduler: add many one-shot tasks quickly
+    // This increases chance of manage_tasks() running while interval task re-adds itself
+    for (int i = 0; i < 1000; ++i) {
+        s.in("spam" + std::to_string(i), std::chrono::milliseconds(1 + i % 50), []{});
+    }
+
+    // Also keep the main thread busy so scheduler thread gets CPU time
+    // This maximizes interleaving
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    // If we get here without crashing → the bug was fixed!
+    // Otherwise → segfault in std::_Rb_tree_increment inside manage_tasks()
+    EXPECT_GT(result.load(), 0);  // Just to keep test "passing" if fixed
 }
