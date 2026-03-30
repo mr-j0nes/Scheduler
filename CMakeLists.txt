@@ -18,7 +18,14 @@ target_link_libraries(example Threads::Threads)
 enable_testing()
 
 add_executable(Scheduler_test Scheduler_test.cpp)
-target_compile_options(Scheduler_test PRIVATE -Wall -Werror)
+target_compile_options(Scheduler_test PRIVATE 
+    -Wall 
+    -Werror 
+    # -fsanitize=thread -g -O1
+)
+target_link_options(Scheduler_test PRIVATE 
+    # -fsanitize=thread
+)
 target_link_libraries(Scheduler_test Threads::Threads gtest gtest_main)
 
 add_test(NAME Scheduler_test COMMAND Scheduler_test)
