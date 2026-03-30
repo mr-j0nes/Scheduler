@@ -418,10 +418,20 @@ namespace Cppsched {
 
         void run_watcher_loop() {
           while (!done) {
-            if (tasks.empty()) {
+            bool has_task{false};
+            MonoClock::time_point time_of_first_task;
+            {
+              std::unique_lock<std::mutex> l(lock);
+              if (! tasks.empty()) {
+                time_of_first_task = tasks.begin()->first;
+                has_task = true;
+              }
+            }
+            // We could have a race condition between has_task and below if(). We
+            // could use a condition_variable instead but we'd need to be very careful.
+            if (! has_task) {
               sleeper.sleep();
             } else {
-              auto time_of_first_task = (*tasks.begin()).first;
               sleeper.sleep_until(time_of_first_task);
             }
             manage_tasks();
