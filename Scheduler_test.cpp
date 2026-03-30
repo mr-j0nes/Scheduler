@@ -10,9 +10,11 @@
 
 #include "Scheduler.hpp"
 
-using Clock = std::chrono::system_clock;
+using WallClock = std::chrono::system_clock; // OK: tests use wall time
+using MonoClock = std::chrono::steady_clock;
+using Duration = std::chrono::nanoseconds;
 
-inline std::string format_time_point(const std::string &format, const Clock::time_point date)
+inline std::string format_time_point(const std::string &format, const WallClock::time_point date)
 {
     char       buffer[80] = "";
     std::time_t date_c = std::chrono::system_clock::to_time_t(date);
@@ -31,18 +33,20 @@ class SchedulerTest : public testing::Test
 protected:
     std::string taskId {"testId"};
     Cppsched::Scheduler s;
-    Clock::duration d_100ms {std::chrono::milliseconds(100)};
-    Clock::duration d_50ms {std::chrono::milliseconds(50)};
-    Clock::duration d_5ms {std::chrono::milliseconds(5)};
-    Clock::duration time_until_task {d_100ms};
-    Clock::duration task_duration {d_100ms};
+    Duration d_100ms {std::chrono::milliseconds(100)};
+    Duration d_50ms {std::chrono::milliseconds(50)};
+    Duration d_5ms {std::chrono::milliseconds(5)};
+    Duration time_until_task {d_100ms};
+    Duration task_duration {d_100ms};
     std::atomic<int> result {0};
     std::atomic<bool> done {false};
     std::function<void()> f;
+    std::function<void()> f_fast;
     std::function<void()> f_except;
 
     SchedulerTest() :
         f([this](){std::this_thread::sleep_for(task_duration); done = true; ++result;}),
+        f_fast([this](){done = true; ++result;}),
         f_except([](){throw std::runtime_error("exception");})
     {
     }
@@ -53,6 +57,13 @@ protected:
 
     void TearDown() override
     {
+    }
+
+    inline std::chrono::system_clock::time_point mono_to_sys(std::chrono::steady_clock::time_point tp)
+    {
+        auto now_sys  = std::chrono::system_clock::now();
+        auto now_mono = std::chrono::steady_clock::now();
+        return now_sys + (tp - now_mono);
     }
 };
 
@@ -118,24 +129,24 @@ TEST_F(SchedulerTest, InTask_get_new_time)
 {
     Cppsched::InTask inTask(taskId, "blah", [](){});
 
-    EXPECT_EQ(inTask.get_new_time(), Clock::time_point(Clock::duration(0)));
+    EXPECT_EQ(inTask.get_new_time(), MonoClock::time_point(MonoClock::duration(0)));
 }
 
 TEST_F(SchedulerTest, AtTask_get_new_time)
 {
     Cppsched::AtTask atTask(taskId, "blah", [](){});
 
-    EXPECT_EQ(atTask.get_new_time(), Clock::time_point(Clock::duration(0)));
+    EXPECT_EQ(atTask.get_new_time(), MonoClock::time_point(MonoClock::duration(0)));
 }
 
 TEST_F(SchedulerTest, EveryTask_get_new_time)
 {
-    Clock::duration dur = std::chrono::seconds(37);
+    WallClock::duration dur = std::chrono::seconds(37);
 
     Cppsched::EveryTask everyTask(taskId, "blah", dur, [](){});
 
-    auto now {format_time_point("%F %T", everyTask.get_new_time())};
-    auto next {format_time_point("%F %T", Clock::now() + dur)};
+    auto now {format_time_point("%F %T", mono_to_sys(everyTask.get_new_time()))};
+    auto next {format_time_point("%F %T", WallClock::now() + dur)};
 
     EXPECT_EQ(now, next);
 }
@@ -145,25 +156,25 @@ TEST_F(SchedulerTest, CronTask_get_new_time)
     // Every 5 seconds but only if it falls in second 0, 5, 10, 15, ..., etc.
     // So, we need to wait til our current time falls in that way:
 
-    while(stoi(format_time_point("%S", Clock::now())) % 5 != 0)
+    while(stoi(format_time_point("%S", WallClock::now())) % 5 != 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     const std::string expression {"*/5 * * * * *"};
-    Clock::duration dur = std::chrono::seconds(5);
+    WallClock::duration dur = std::chrono::seconds(5);
 
     Cppsched::CronTask cronTask(taskId, "blah", expression, [](){});
 
-    auto now {format_time_point("%F %T", cronTask.get_new_time())};
-    auto next {format_time_point("%F %T", Clock::now() + dur)};
+    auto now {format_time_point("%F %T", mono_to_sys(cronTask.get_new_time()))};
+    auto next {format_time_point("%F %T", WallClock::now() + dur)};
 
     EXPECT_EQ(now, next);
 }
 
 TEST_F(SchedulerTest, try_parse)
 {
-    auto time_now = Clock::to_time_t(Clock::now());
+    auto time_now = WallClock::to_time_t(WallClock::now());
     std::tm tm = *std::localtime(&time_now);
 
     EXPECT_FALSE(Cppsched::try_parse(tm, "blah blah", "%H:%M:%S"));
@@ -196,7 +207,7 @@ TEST_F(SchedulerTest, InterruptableSleep)
     // sleep_until
     done = false;
     threads.push([&is, &done](int){
-            is.sleep_until(Clock::now() + std::chrono::milliseconds(100));
+            is.sleep_until(MonoClock::now() + std::chrono::milliseconds(100));
             done = true;
             });
 
@@ -283,13 +294,35 @@ TEST_F(SchedulerTest, Scheduler_in)
     EXPECT_FALSE(done);
 }
 
+TEST_F(SchedulerTest, Scheduler_in_zero_duration)
+{
+    done = false;
+
+    s.in(taskId, Duration(0), f_fast);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    EXPECT_TRUE(done);
+}
+
+TEST_F(SchedulerTest, Scheduler_in_very_small_duration)
+{
+    done = false;
+
+    s.in(taskId, std::chrono::microseconds(100), f_fast);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    EXPECT_TRUE(done);
+}
+
 TEST_F(SchedulerTest, Scheduler_at)
 {
-    Clock::time_point time;
+    WallClock::time_point time;
     std::string expression;
 
     // Handles in right time
-    time = Clock::now() + time_until_task;
+    time = WallClock::now() + time_until_task;
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f);
@@ -301,7 +334,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     EXPECT_EQ(result, 1);
 
     // No exceptions
-    time = Clock::now() + time_until_task;
+    time = WallClock::now() + time_until_task;
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f_except);
@@ -311,7 +344,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     EXPECT_FALSE(done);
 
     // Disable task
-    time = Clock::now() + time_until_task;
+    time = WallClock::now() + time_until_task;
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f);
@@ -323,7 +356,7 @@ TEST_F(SchedulerTest, Scheduler_at)
     EXPECT_FALSE(done);
 
     // Remove task
-    time = Clock::now() + time_until_task;
+    time = WallClock::now() + time_until_task;
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, time, f);
@@ -337,7 +370,7 @@ TEST_F(SchedulerTest, Scheduler_at)
 
 TEST_F(SchedulerTest, Scheduler_at_with_expression)
 {
-    Clock::time_point time;
+    WallClock::time_point time;
     std::string expression;
     std::string expression_now;
     auto one_second {std::chrono::seconds(1)};
@@ -349,16 +382,16 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-        const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
-        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+        const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(WallClock::now().time_since_epoch()).count();
+        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(WallClock::now().time_since_epoch()).count();
         if (static_cast<int>(durMs - durS * 1000) > 950)
             break;
     }
 
     // Handles in right time
-    time = Clock::now() + (one_second * 2);
+    time = WallClock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
-    expression_now = format_time_point("%F %T", Clock::now());
+    expression_now = format_time_point("%F %T", WallClock::now());
     done = false;
     s.at(taskId, expression, f);
     std::this_thread::sleep_for(d_5ms);
@@ -368,7 +401,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     EXPECT_TRUE(done) << expression << " " << expression_now;
 
     // No exceptions
-    time = Clock::now() + (one_second * 2);
+    time = WallClock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f_except);
@@ -377,7 +410,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     EXPECT_FALSE(done);
 
     // Disable task
-    time = Clock::now() + (one_second * 2);
+    time = WallClock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f);
@@ -388,7 +421,7 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     EXPECT_FALSE(done);
 
     // Remove task
-    time = Clock::now() + (one_second * 2);
+    time = WallClock::now() + (one_second * 2);
     expression = format_time_point("%F %T", time);
     done = false;
     s.at(taskId, expression, f);
@@ -397,6 +430,18 @@ TEST_F(SchedulerTest, Scheduler_at_with_expression)
     EXPECT_TRUE(s.remove_task(taskId));
     std::this_thread::sleep_for(one_second);
     EXPECT_FALSE(done);
+}
+
+TEST_F(SchedulerTest, Scheduler_at_past_time_executes_immediately)
+{
+    auto past = WallClock::now() - std::chrono::seconds(1);
+
+    done = false;
+    s.at(taskId, past, f_fast);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    EXPECT_TRUE(done);
 }
 
 TEST_F(SchedulerTest, Scheduler_every_non_concurrency)
@@ -562,8 +607,8 @@ TEST_F(SchedulerTest, Scheduler_cron_non_concurrency)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-        const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
-        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+        const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(WallClock::now().time_since_epoch()).count();
+        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(WallClock::now().time_since_epoch()).count();
         if (static_cast<int>(durMs - durS * 1000) < 50)
             break;
     }
@@ -642,8 +687,8 @@ TEST_F(SchedulerTest, Scheduler_cron_with_concurrency)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-        const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
-        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+        const time_t durS = std::chrono::duration_cast<std::chrono::seconds>(WallClock::now().time_since_epoch()).count();
+        const int64_t durMs = std::chrono::duration_cast<std::chrono::milliseconds>(WallClock::now().time_since_epoch()).count();
         if (static_cast<int>(durMs - durS * 1000) < 50)
             break;
     }
@@ -700,6 +745,22 @@ TEST_F(SchedulerTest, Scheduler_cron_with_concurrency)
     s.every(taskId, task_duration, f_except);
     std::this_thread::sleep_for(task_duration);
     EXPECT_EQ(result, 0);
+}
+
+TEST_F(SchedulerTest, Scheduler_cron_conversion_consistency)
+{
+    const std::string expression {"*/1 * * * * *"}; // every second
+
+    Cppsched::CronTask cronTask(taskId, "blah", expression, [](){});
+
+    auto t1 = cronTask.get_new_time();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    auto t2 = cronTask.get_new_time();
+
+    // Next execution should still be roughly same second boundary
+    auto diff = std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count();
+
+    EXPECT_LE(diff, 1);
 }
 
 TEST_F(SchedulerTest, Scheduler_interval_small_task_dur)
@@ -893,8 +954,8 @@ TEST_F(SchedulerTest, Scheduler_get_tasks_list)
 {
     std::vector<Cppsched::TaskReport> task_report;
     std::vector<Cppsched::TaskReport>::iterator task_report_it;
-    Clock::time_point time;
-    time = Clock::now() + std::chrono::seconds(10);
+    WallClock::time_point time;
+    time = WallClock::now() + std::chrono::seconds(10);
 
     s.every("every1", time_until_task, f);
     s.interval("interval1", time_until_task, f);
@@ -921,6 +982,48 @@ TEST_F(SchedulerTest, Scheduler_get_tasks_list)
     ASSERT_NE(task_report_it, task_report.end());
     EXPECT_EQ(task_report_it->id, "interval1");
     EXPECT_EQ(task_report_it->enabled, true);
+}
+
+TEST_F(SchedulerTest, Scheduler_multiple_tasks_same_time)
+{
+    s.in("t1", std::chrono::milliseconds(50), f_fast);
+    s.in("t2", std::chrono::milliseconds(50), f_fast);
+    s.in("t3", std::chrono::milliseconds(50), f_fast);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    EXPECT_EQ(result, 3);
+}
+
+TEST_F(SchedulerTest, Scheduler_rapid_add_remove)
+{
+    for (int i = 0; i < 100; ++i)
+    {
+        std::string id = "task" + std::to_string(i);
+
+        s.in(id, std::chrono::milliseconds(10), f_fast);
+        s.remove_task(id);
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    SUCCEED(); // Should not crash
+}
+
+TEST_F(SchedulerTest, Scheduler_high_load_short_tasks)
+{
+    std::atomic<int> counter{0};
+
+    for (int i = 0; i < 500; ++i)
+    {
+        s.in("task" + std::to_string(i),
+             std::chrono::milliseconds(i % 10),
+             [&]() { ++counter; });
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    EXPECT_EQ(counter, 500);
 }
 
 TEST_F(SchedulerTest, Crash_IteratorInvalidation_IntervalTask_Reentry)
@@ -951,4 +1054,22 @@ TEST_F(SchedulerTest, Crash_IteratorInvalidation_IntervalTask_Reentry)
     // If we get here without crashing → the bug was fixed!
     // Otherwise → segfault in std::_Rb_tree_increment inside manage_tasks()
     EXPECT_GT(result.load(), 0);  // Just to keep test "passing" if fixed
+}
+
+TEST_F(SchedulerTest, Clock_conversion_round_trip_stability)
+{
+    auto now_sys  = WallClock::now();
+    auto now_mono = MonoClock::now();
+
+    auto mono_tp = now_mono + std::chrono::seconds(2);
+
+    auto sys_tp = now_sys + (mono_tp - now_mono);
+
+    auto reconstructed_mono = now_mono + (sys_tp - now_sys);
+
+    auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
+        reconstructed_mono - mono_tp
+    ).count();
+
+    EXPECT_LT(std::abs(diff), 5); // Allow small drift
 }

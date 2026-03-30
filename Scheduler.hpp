@@ -15,7 +15,9 @@
 
 namespace Cppsched {
 
-    using Clock = std::chrono::system_clock;
+    using WallClock = std::chrono::system_clock;
+    using MonoClock = std::chrono::steady_clock;
+    using Duration = std::chrono::nanoseconds;
 
     class BadDateFormat : public std::exception {
     public:
@@ -62,7 +64,7 @@ namespace Cppsched {
         explicit Task(const std::string &task_id, const std::string &time_str, std::function<void()> &&f, bool recur = false, bool interval = false, bool enabled  = true) :
                 id(task_id), time_str(time_str), f(std::move(f)), recur(recur), interval(interval), enabled(enabled) {}
 
-        virtual Clock::time_point get_new_time() const = 0;
+        virtual MonoClock::time_point get_new_time() const = 0;
 
         std::string id;         // Unique ID or user-defined name for the task
         std::string time_str;   // String represention of the time trigger
@@ -79,7 +81,7 @@ namespace Cppsched {
         explicit InTask(const std::string &task_id, const std::string &time_str, std::function<void()> &&f) : Task(task_id, time_str, std::move(f)) {}
 
         // dummy time_point because it's not used
-        Clock::time_point get_new_time() const override { return Clock::time_point(Clock::duration(0)); }
+        MonoClock::time_point get_new_time() const override { return MonoClock::time_point(MonoClock::duration(0)); }
     };
 
     class AtTask : public Task { // Basically same as in
@@ -87,18 +89,18 @@ namespace Cppsched {
         explicit AtTask(const std::string &task_id, const std::string &time_str, std::function<void()> &&f) : Task(task_id, time_str, std::move(f)) {}
 
         // dummy time_point because it's not used
-        Clock::time_point get_new_time() const override { return Clock::time_point(Clock::duration(0)); }
+        MonoClock::time_point get_new_time() const override { return MonoClock::time_point(MonoClock::duration(0)); }
     };
 
     class EveryTask : public Task {
     public:
-        EveryTask(const std::string &task_id, const std::string &time_str, Clock::duration time, std::function<void()> &&f, bool interval = false) :
+        EveryTask(const std::string &task_id, const std::string &time_str, MonoClock::duration time, std::function<void()> &&f, bool interval = false) :
                 Task(task_id, time_str, std::move(f), true, interval), time(time) {}
 
-        Clock::time_point get_new_time() const override {
-          return Clock::now() + time;
+        MonoClock::time_point get_new_time() const override {
+          return MonoClock::now() + time;
         };
-        Clock::duration time;
+        MonoClock::duration time;
     };
 
 
@@ -107,20 +109,23 @@ namespace Cppsched {
         CronTask(const std::string &task_id, const std::string &time_str, std::string expression, std::function<void()> &&f) : Task(task_id, time_str, std::move(f), true),
                                                                        exp(std::move(expression)) {}
 
-        Clock::time_point get_new_time() const override {
-            Clock::time_point next;
+        MonoClock::time_point get_new_time() const override {
+            WallClock::time_point next;
             try
             {
                 auto cron = cron::make_cron(exp);
 
-                next = cron::cron_next(cron, Clock::now());
+                next = cron::cron_next(cron, WallClock::now());
             }
             catch (cron::bad_cronexpr const & e)
             {
                 throw BadCronExpression(std::string(e.what()));
             }
 
-            return next;
+            // convert WallClock -> MonoClock
+            auto now_sys  = WallClock::now();
+            auto now_mono = MonoClock::now();
+            return now_mono + (next - now_sys);
         };
 
         std::string exp;
@@ -132,7 +137,7 @@ namespace Cppsched {
     }
 
     class InterruptableSleep {
-        using Clock = std::chrono::system_clock;
+        using Clock = std::chrono::steady_clock;
 
         // InterruptableSleep offers a sleep that can be interrupted by any thread.
         // It can be interrupted multiple times
@@ -236,41 +241,44 @@ namespace Cppsched {
         }
 
         template<typename _Callable, typename... _Args>
-        void in(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
+        void in(const std::string &task_id, const Duration time, _Callable &&f, _Args &&... args) {
           std::string time_str {"in: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<InTask>(task_id, time_str,
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
-          add_task(task_id, Clock::now() + time, std::move(t));
+          add_task(task_id, MonoClock::now() + time, std::move(t));
         }
 
         template<typename _Callable, typename... _Args>
-        void at(const std::string &task_id, const Clock::time_point time, _Callable &&f, _Args &&... args) {
+        void at(const std::string &task_id, const WallClock::time_point time, _Callable &&f, _Args &&... args) {
           std::string time_str {"at: " + format_time_point("%F %T %z", time)};
           std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str,
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
-          add_task(task_id, time, std::move(t));
+          auto now_sys  = WallClock::now();
+          auto now_mono = MonoClock::now();
+          auto mono_tp  = now_mono + (time - now_sys);
+          add_task(task_id, mono_tp, std::move(t));
         }
 
         template<typename _Callable, typename... _Args>
         void at(const std::string &task_id, const std::string &time, _Callable &&f, _Args &&... args) {
           // get current time as a tm object
-          auto time_now = Clock::to_time_t(Clock::now());
+          auto time_now = WallClock::to_time_t(WallClock::now());
           std::tm tm = *std::localtime(&time_now);
 
           // our final time as a time_point
-          Clock::time_point tp;
+          WallClock::time_point tp;
 
           if (try_parse(tm, time, "%H:%M:%S")) {
             // convert tm back to time_t, then to a time_point and assign to final
-            tp = Clock::from_time_t(std::mktime(&tm));
+            tp = WallClock::from_time_t(std::mktime(&tm));
 
             // if we've already passed this time, the user will mean next day, so add a day.
-            if (Clock::now() >= tp)
+            if (WallClock::now() >= tp)
               tp += std::chrono::hours(24);
           } else if (try_parse(tm, time, "%Y-%m-%d %H:%M:%S")) {
-            tp = Clock::from_time_t(std::mktime(&tm));
+            tp = WallClock::from_time_t(std::mktime(&tm));
           } else if (try_parse(tm, time, "%Y/%m/%d %H:%M:%S")) {
-            tp = Clock::from_time_t(std::mktime(&tm));
+            tp = WallClock::from_time_t(std::mktime(&tm));
           } else {
             // could not parse time
             throw BadDateFormat("Cannot parse time string: " + time);
@@ -280,11 +288,14 @@ namespace Cppsched {
           std::string time_str {"at: " + format_time_point("%F %T %z", tp)};
           std::shared_ptr<Task> t = std::make_shared<AtTask>(task_id, time_str,
                   std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...));
-          add_task(task_id, tp, std::move(t));
+          auto now_sys  = WallClock::now();
+          auto now_mono = MonoClock::now();
+          auto mono_tp  = now_mono + (tp - now_sys);
+          add_task(task_id, mono_tp, std::move(t));
         }
 
         template<typename _Callable, typename... _Args>
-        void every(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
+        void every(const std::string &task_id, const Duration time, _Callable &&f, _Args &&... args) {
           std::string time_str {"every: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...));
@@ -302,11 +313,11 @@ namespace Cppsched {
         }
 
         template<typename _Callable, typename... _Args>
-        void interval(const std::string &task_id, const Clock::duration time, _Callable &&f, _Args &&... args) {
+        void interval(const std::string &task_id, const Duration time, _Callable &&f, _Args &&... args) {
           std::string time_str {"interval: " + format_duration(time)};
           std::shared_ptr<Task> t = std::make_shared<EveryTask>(task_id, time_str, time, std::bind(std::forward<_Callable>(f),
                                                                                 std::forward<_Args>(args)...), true);
-          add_task(task_id, Clock::now(), std::move(t));
+          add_task(task_id, MonoClock::now(), std::move(t));
         }
 
         // Method to remove a task by ID or name
@@ -374,11 +385,12 @@ namespace Cppsched {
             {
               auto &task_pair {map_pair.second};
               auto &task {task_pair->second};
-              auto next_run {task->get_new_time()};
-              // We'll have next_run precission of just 1 sec for now, we might
-              // increase this in the future if needed. We just need to figure
-              // out how.
-              v.push_back(TaskReport(task->id, task->time_str, format_time_point("%F %T %z", next_run), task->enabled));
+              auto &mono_tp = task_pair->first;
+
+              auto now_sys  = WallClock::now();
+              auto now_mono = MonoClock::now();
+              auto sys_tp   = now_sys + (mono_tp - now_mono);
+              v.push_back(TaskReport(task->id, task->time_str, format_time_point("%F %T %z", sys_tp), task->enabled));
             }
           }
 
@@ -390,13 +402,13 @@ namespace Cppsched {
 
         InterruptableSleep sleeper;
 
-        std::multimap<Clock::time_point, std::shared_ptr<Task>> tasks;
-        std::multimap<Clock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
-        std::map<std::string, std::multimap<Clock::time_point, std::shared_ptr<Task>>::iterator> tasks_map;
+        std::multimap<MonoClock::time_point, std::shared_ptr<Task>> tasks;
+        std::multimap<MonoClock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
+        std::map<std::string, std::multimap<MonoClock::time_point, std::shared_ptr<Task>>::iterator> tasks_map;
         std::mutex lock;
         std::unique_ptr<ThreadPool> threads;
 
-        void add_task(const Clock::time_point time, std::shared_ptr<Task> t) {
+        void add_task(const MonoClock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
           const std::string &task_id {t->id};
           auto inserted_task = tasks.emplace(time, std::move(t));
@@ -416,7 +428,7 @@ namespace Cppsched {
           }
         }
 
-        void add_task(const std::string& task_id, const Clock::time_point time, std::shared_ptr<Task> t) {
+        void add_task(const std::string& task_id, const MonoClock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
           if (tasks_map.find(task_id) == tasks_map.end()) {
             auto inserted_task = tasks.emplace(time, std::move(t));
@@ -430,7 +442,7 @@ namespace Cppsched {
         void manage_tasks() {
           std::lock_guard<std::mutex> l(lock);
 
-          auto end_of_tasks_to_run = tasks.upper_bound(Clock::now());
+          auto end_of_tasks_to_run = tasks.upper_bound(MonoClock::now());
 
           // if there are any tasks to be run and removed
           if (end_of_tasks_to_run != tasks.begin()) {
@@ -506,7 +518,7 @@ namespace Cppsched {
           }
         }
 
-        inline std::string format_time_point(const std::string &format, const Clock::time_point date) const
+        inline std::string format_time_point(const std::string &format, const WallClock::time_point date) const
         {
           char       buffer[80] = "";
           std::time_t date_c = std::chrono::system_clock::to_time_t(date);
