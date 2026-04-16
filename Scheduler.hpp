@@ -65,15 +65,18 @@ namespace Cppsched {
                 id(task_id), time_str(time_str), f(std::move(f)), recur(recur), interval(interval), enabled(enabled) {}
 
         virtual MonoClock::time_point get_new_time() const = 0;
+        MonoClock::time_point get_sch_time() const { return sch_time; }
+        void set_sch_time(MonoClock::time_point t) { sch_time = t; }
 
-        std::string id;         // Unique ID or user-defined name for the task
-        std::string time_str;   // String represention of the time trigger
+        std::string id;                 // Unique ID or user-defined name for the task
+        std::string time_str;           // String represention of the time trigger
         std::function<void()> f;
 
         bool recur;
         bool interval;
-        bool enabled;           // Flag to indicate if the task is enabled
-        bool removed {false};   // Flag to indicate if the task is removed. Helps dealing with interval removal.
+        bool enabled;                   // Flag to indicate if the task is enabled
+        bool removed {false};           // Flag to indicate if the task is removed. Helps dealing with interval removal.
+        MonoClock::time_point sch_time; // Scheduled time
     };
 
     class InTask : public Task {
@@ -328,7 +331,7 @@ namespace Cppsched {
           // Find the task in the tasks_map
           auto task_iterator = tasks_map.find(task_id);
           if (task_iterator != tasks_map.end()) {
-            task_iterator->second->second->removed = true;;
+            task_iterator->second->removed = true;;
             tasks_map.erase(task_iterator);
 
             return true;
@@ -346,8 +349,7 @@ namespace Cppsched {
           auto task_map_iterator = tasks_map.find(task_id);
           if (task_map_iterator != tasks_map.end()) {
             // Disable the task
-            auto &task_pair {task_map_iterator->second};
-            auto &task {task_pair->second};
+            auto &task {task_map_iterator->second};
             task->enabled = false;
 
             return true;
@@ -365,8 +367,7 @@ namespace Cppsched {
           auto task_map_iterator = tasks_map.find(task_id);
           if (task_map_iterator != tasks_map.end()) {
             // Enable the task
-            auto &task_pair {task_map_iterator->second};
-            auto &task {task_pair->second};
+            auto &task {task_map_iterator->second};
             task->enabled = true;
 
             return true;
@@ -383,9 +384,8 @@ namespace Cppsched {
             std::lock_guard<std::mutex> l(lock);
             for (auto &map_pair : tasks_map)
             {
-              auto &task_pair {map_pair.second};
-              auto &task {task_pair->second};
-              auto &mono_tp = task_pair->first;
+              auto &task {map_pair.second};
+              auto mono_tp = task->get_sch_time();
 
               auto now_sys  = WallClock::now();
               auto now_mono = MonoClock::now();
@@ -404,15 +404,16 @@ namespace Cppsched {
 
         std::multimap<MonoClock::time_point, std::shared_ptr<Task>> tasks;
         std::multimap<MonoClock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
-        std::map<std::string, std::multimap<MonoClock::time_point, std::shared_ptr<Task>>::iterator> tasks_map;
+        std::map<std::string, std::shared_ptr<Task>> tasks_map;
         std::mutex lock;
         std::unique_ptr<ThreadPool> threads;
 
         void add_task(const MonoClock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
           const std::string &task_id {t->id};
-          auto inserted_task = tasks.emplace(time, std::move(t));
-          tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
+          t->set_sch_time(time);
+          tasks.emplace(time, t);
+          tasks_map[task_id] = std::move(t);
           sleeper.interrupt();
         }
 
@@ -441,8 +442,9 @@ namespace Cppsched {
         void add_task(const std::string& task_id, const MonoClock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
           if (tasks_map.find(task_id) == tasks_map.end()) {
-            auto inserted_task = tasks.emplace(time, std::move(t));
-            tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
+            t->set_sch_time(time);
+            tasks.emplace(time, t);
+            tasks_map[task_id] = std::move(t);
             sleeper.interrupt();
           } else {
             throw TaskAlreadyExists("Task with id <" + task_id + "> already exists");
@@ -469,7 +471,6 @@ namespace Cppsched {
                 if (task->enabled && ! task->removed) {
                   // Temporarily save task until completed
                   auto inserted_task = completed_interval_tasks.insert(*i);
-                  tasks_map[task->id] = inserted_task;
 
                   // Run
                   threads->push([this, task, inserted_task](int) {
@@ -509,12 +510,12 @@ namespace Cppsched {
             {
               if (! task_pair.second->removed)
               {
-                // tasks.emplace(task_pair.first, std::move(task_pair.second));
-                auto &time {task_pair.first};
+                tasks.emplace(task_pair.first, task_pair.second);
+                MonoClock::time_point t {task_pair.first};
                 auto &task {task_pair.second};
+                task->set_sch_time(t);
                 const std::string &task_id {task->id};
-                auto inserted_task = tasks.emplace(time, std::move(task));
-                tasks_map[task_id] = inserted_task; // Map task ID to its iterator in tasks multimap
+                tasks_map[task_id] = task;
               }
             }
 

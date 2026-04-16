@@ -253,6 +253,19 @@ TEST_F(SchedulerTest, Scheduler_remove_notExist)
     EXPECT_FALSE(s.remove_task("Blah blah"));
 }
 
+TEST_F(SchedulerTest, Scheduler_remove_afterRemoved)
+{
+    s.interval(taskId, std::chrono::milliseconds(1),  [] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Simulate long-running task
+    });
+
+    for (int i = 0; i < 7; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        s.remove_task(taskId); // Called repeatedly while task is running
+        s.remove_task(taskId);
+    }
+}
+
 TEST_F(SchedulerTest, Scheduler_in)
 {
     // Handles in right time
