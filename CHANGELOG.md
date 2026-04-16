@@ -1,3 +1,12 @@
+## [0.3.4](https://github.com/mr-j0nes/Scheduler/compare/v0.3.3...v0.3.4) (2026-04-16)
+
+
+### Bug Fixes
+
+* remove after removed -> iterator invalidated ([babd1f3](https://github.com/mr-j0nes/Scheduler/commit/babd1f3eb2be81866df6a3766b2b238e1dc24ece))
+
+
+
 ## [0.3.3](https://github.com/mr-j0nes/Scheduler/compare/v0.3.2...v0.3.3) (2026-03-30)
 
 
@@ -31,15 +40,6 @@
 ### Features
 
 * support using own thread pool ([613061e](https://github.com/mr-j0nes/Scheduler/commit/613061e2e181678643344e135ba7e5b745850c81))
-
-
-
-## [0.2.2](https://github.com/mr-j0nes/Scheduler/compare/v0.2.1...v0.2.2) (2025-03-26)
-
-
-### Bug Fixes
-
-* interval should start right away ([9f45bcf](https://github.com/mr-j0nes/Scheduler/commit/9f45bcfca8b34d7de469c8e5c667b1b9cb24204a)), closes [#9](https://github.com/mr-j0nes/Scheduler/issues/9)
 
 
 
