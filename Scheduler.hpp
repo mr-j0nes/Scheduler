@@ -50,7 +50,9 @@ namespace Cppsched {
     };
 
     struct TaskReport {
-      TaskReport( std::string id, std::string time_str, std::string next_run_str, bool enabled): id(id), time_str(time_str), next_run_str(next_run_str), enabled(enabled)
+      TaskReport(const std::string &id, const std::string &time_str,
+                 const std::string &next_run_str, bool enabled):
+        id(id), time_str(time_str), next_run_str(next_run_str), enabled(enabled)
       {}
 
       std::string id;
