@@ -253,6 +253,42 @@ TEST_F(SchedulerTest, Scheduler_remove_notExist)
     EXPECT_FALSE(s.remove_task("Blah blah"));
 }
 
+TEST_F(SchedulerTest, Scheduler_has_task_notExist)
+{
+    EXPECT_FALSE(s.has_task("Blah blah"));
+}
+
+TEST_F(SchedulerTest, Scheduler_has_task_exists)
+{
+    s.in(taskId, time_until_task, f_fast);
+    EXPECT_TRUE(s.has_task(taskId));
+}
+
+TEST_F(SchedulerTest, Scheduler_has_task_after_remove)
+{
+    s.in(taskId, time_until_task, f_fast);
+    EXPECT_TRUE(s.has_task(taskId));
+    s.remove_task(taskId);
+    EXPECT_FALSE(s.has_task(taskId));
+}
+
+TEST_F(SchedulerTest, Scheduler_has_task_after_disable)
+{
+    s.in(taskId, time_until_task, f_fast);
+    EXPECT_TRUE(s.has_task(taskId));
+    s.disable_task(taskId);
+    EXPECT_TRUE(s.has_task(taskId));
+}
+
+TEST_F(SchedulerTest, Scheduler_has_task_after_enable)
+{
+    s.in(taskId, time_until_task, f_fast);
+    s.disable_task(taskId);
+    EXPECT_TRUE(s.has_task(taskId));
+    s.enable_task(taskId);
+    EXPECT_TRUE(s.has_task(taskId));
+}
+
 TEST_F(SchedulerTest, Scheduler_remove_afterRemoved)
 {
     s.interval(taskId, std::chrono::milliseconds(1),  [] {

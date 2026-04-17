@@ -378,6 +378,12 @@ namespace Cppsched {
           return false;
         }
 
+        bool has_task(const std::string& task_id)
+        {
+          std::lock_guard<std::mutex> l(lock);
+          return tasks_map.find(task_id) != tasks_map.end();
+        }
+
         std::vector<TaskReport> get_tasks_list()
         {
           std::vector<TaskReport> v;
