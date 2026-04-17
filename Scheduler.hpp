@@ -69,7 +69,7 @@ namespace Cppsched {
         void set_sch_time(MonoClock::time_point t) { sch_time = t; }
 
         std::string id;                 // Unique ID or user-defined name for the task
-        std::string time_str;           // String represention of the time trigger
+        std::string time_str;           // String representation of the time trigger
         std::function<void()> f;
 
         bool recur;
@@ -146,7 +146,7 @@ namespace Cppsched {
         // It can be interrupted multiple times
         // and be interrupted before any sleep is called (the sleep will immediately complete)
         // Has same interface as condition_variables and futures, except with sleep instead of wait.
-        // For a given object, sleep can be called on multiple threads safely, but is not recommended as behaviour is undefined.
+        // For a given object, sleep can be called on multiple threads safely, but is not recommended as behavior is undefined.
 
     public:
         InterruptableSleep() : interrupted(false) {
