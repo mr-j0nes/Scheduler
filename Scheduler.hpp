@@ -531,18 +531,38 @@ namespace Cppsched {
           }
         }
 
-        inline std::string format_time_point(const std::string &format, const WallClock::time_point date) const
+        template <typename Duration>
+        std::string format_time_point(
+            const std::string& fmt,
+            const std::chrono::time_point<std::chrono::system_clock, Duration>& tp) const
         {
-          char       buffer[80] = "";
-          std::time_t date_c = std::chrono::system_clock::to_time_t(date);
-          std::tm *date_tm = std::localtime(&date_c);
+          auto tp_casted =
+              std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
 
-          if (strftime(buffer, sizeof(buffer), format.c_str(), date_tm) == 0)
-          {
-            throw BadDateFormat("Error in given format <" + format + ">");
-          }
+          // use tp_casted internally
+          return format_time_point_impl(fmt, tp_casted);
+        }
 
-          return std::string(buffer);
+        std::string format_time_point_impl(
+        const std::string& fmt,
+        const std::chrono::system_clock::time_point tp) const
+        {
+          // Convert to time_t
+          std::time_t tt = std::chrono::system_clock::to_time_t(tp);
+
+          // Thread-safe conversion to tm
+          std::tm tm{};
+#if defined(_WIN32)
+          localtime_s(&tm, &tt);   // Windows
+#else
+          localtime_r(&tt, &tm);   // POSIX
+#endif
+
+          // Format using std::put_time
+          std::ostringstream oss;
+          oss << std::put_time(&tm, fmt.c_str());
+
+          return oss.str();
         }
 
         inline std::string format_duration(std::chrono::nanoseconds timeunit) const
