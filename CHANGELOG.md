@@ -1,3 +1,17 @@
+# [0.4.0](https://github.com/mr-j0nes/Scheduler/compare/v0.3.4...v0.4.0) (2026-04-17)
+
+
+### Bug Fixes
+
+* fix format_time_point on VS ([e679dc6](https://github.com/mr-j0nes/Scheduler/commit/e679dc6d4179cbcf8dd2a6b29b3ad8c0d153d30d)), closes [#18](https://github.com/mr-j0nes/Scheduler/issues/18)
+
+
+### Features
+
+* add has_task() method ([ac1f9f2](https://github.com/mr-j0nes/Scheduler/commit/ac1f9f29e78cded11454dc8e346e4be5f12369de)), closes [#18](https://github.com/mr-j0nes/Scheduler/issues/18)
+
+
+
 ## [0.3.4](https://github.com/mr-j0nes/Scheduler/compare/v0.3.3...v0.3.4) (2026-04-16)
 
 
@@ -31,15 +45,6 @@
 ### Bug Fixes
 
 * fix warning ([94fb37f](https://github.com/mr-j0nes/Scheduler/commit/94fb37fa361d59f5acf0bf4b329bf935db400d9f))
-
-
-
-# [0.3.0](https://github.com/mr-j0nes/Scheduler/compare/v0.2.2...v0.3.0) (2025-11-12)
-
-
-### Features
-
-* support using own thread pool ([613061e](https://github.com/mr-j0nes/Scheduler/commit/613061e2e181678643344e135ba7e5b745850c81))
 
 
 
