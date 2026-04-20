@@ -289,6 +289,60 @@ TEST_F(SchedulerTest, Scheduler_has_task_after_enable)
     EXPECT_TRUE(s.has_task(taskId));
 }
 
+TEST_F(SchedulerTest, Scheduler_remove_interval_before_first_run)
+{
+    result = 0;
+    s.interval(taskId, std::chrono::milliseconds(50), [&]() {
+        ++result;
+    });
+
+    // interval runs immediately, so we remove while it's running or just after
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    s.remove_task(taskId);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Task may have started before remove but should not re-schedule
+    EXPECT_FALSE(s.has_task(taskId));
+}
+
+TEST_F(SchedulerTest, Scheduler_remove_interval_while_running)
+{
+    result = 0;
+    task_duration = std::chrono::milliseconds(50);
+    s.interval(taskId, std::chrono::milliseconds(100), [&]() {
+        ++result;
+        std::this_thread::sleep_for(task_duration);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    s.remove_task(taskId);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    EXPECT_EQ(result, 1);
+    EXPECT_FALSE(s.has_task(taskId));
+}
+
+TEST_F(SchedulerTest, Scheduler_remove_every_while_running)
+{
+    result = 0;
+    task_duration = std::chrono::milliseconds(50);
+    s.every(taskId, std::chrono::milliseconds(100), [&]() {
+        ++result;
+        std::this_thread::sleep_for(task_duration);
+    });
+
+    // Wait for at least one run, then remove
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    s.remove_task(taskId);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Task may have started before remove but should not re-schedule
+    EXPECT_FALSE(s.has_task(taskId));
+}
+
 TEST_F(SchedulerTest, Scheduler_remove_afterRemoved)
 {
     s.interval(taskId, std::chrono::milliseconds(1),  [] {

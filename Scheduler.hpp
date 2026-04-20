@@ -333,7 +333,7 @@ namespace Cppsched {
           // Find the task in the tasks_map
           auto task_iterator = tasks_map.find(task_id);
           if (task_iterator != tasks_map.end()) {
-            task_iterator->second->removed = true;;
+            task_iterator->second->removed = true;
             tasks_map.erase(task_iterator);
 
             return true;
@@ -483,14 +483,17 @@ namespace Cppsched {
                   // Run
                   threads->push([this, task, inserted_task](int) {
                       task->f();
+                      completed_interval_tasks.erase(inserted_task);
+                      // Check removed AFTER executing, before re-scheduling
+                      if (task->removed) {
+                          return;
+                      }
                       // no risk of race-condition,
                       // add_task() will wait for manage_tasks() to release lock
                       add_task(task->get_new_time(), task);
-                      completed_interval_tasks.erase(inserted_task);
                       });
-                }
-                else
-                {
+                } else {
+                  // When removed or disabled, still add to recurred but check removed before re-adding
                   recurred_tasks.emplace(task->get_new_time(), std::move(task));
                 }
               } else {
@@ -500,10 +503,10 @@ namespace Cppsched {
                       });
                 }
 
-                if (task->recur) {
+                if (task->recur && ! task->removed) {
                   // calculate time of next run and add the new task to the tasks to be recurred
                   recurred_tasks.emplace(task->get_new_time(), std::move(task));
-                } else {
+                } else if (!task->recur) {
                   // save non recurred to remove from tasks_map
                   non_recurred_tasks.push_back(task);
                 }
