@@ -1,3 +1,12 @@
+## [0.4.1](https://github.com/mr-j0nes/Scheduler/compare/v0.4.0...v0.4.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* check for task remove when re-adding ([2b4998b](https://github.com/mr-j0nes/Scheduler/commit/2b4998ba0dcb06654b84d89f1c30baf44d71c3e2)), closes [#20](https://github.com/mr-j0nes/Scheduler/issues/20)
+
+
+
 # [0.4.0](https://github.com/mr-j0nes/Scheduler/compare/v0.3.4...v0.4.0) (2026-04-17)
 
 
@@ -36,15 +45,6 @@
 ### Bug Fixes
 
 * add stop() method to custom thread pool ([d259f62](https://github.com/mr-j0nes/Scheduler/commit/d259f6277231e583ff99ad49a0d57b7f3d9b3f0c))
-
-
-
-## [0.3.1](https://github.com/mr-j0nes/Scheduler/compare/v0.3.0...v0.3.1) (2025-11-14)
-
-
-### Bug Fixes
-
-* fix warning ([94fb37f](https://github.com/mr-j0nes/Scheduler/commit/94fb37fa361d59f5acf0bf4b329bf935db400d9f))
 
 
 
