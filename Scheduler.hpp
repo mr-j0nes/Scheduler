@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <iomanip>
 #include <map>
@@ -70,15 +71,15 @@ namespace Cppsched {
         MonoClock::time_point get_sch_time() const { return sch_time; }
         void set_sch_time(MonoClock::time_point t) { sch_time = t; }
 
-        std::string id;                 // Unique ID or user-defined name for the task
-        std::string time_str;           // String representation of the time trigger
+        std::string id;                     // Unique ID or user-defined name for the task
+        std::string time_str;               // String representation of the time trigger
         std::function<void()> f;
 
         bool recur;
         bool interval;
-        bool enabled;                   // Flag to indicate if the task is enabled
-        bool removed {false};           // Flag to indicate if the task is removed. Helps dealing with interval removal.
-        MonoClock::time_point sch_time; // Scheduled time
+        bool enabled;                       // Flag to indicate if the task is enabled
+        std::atomic<bool> removed {false};  // Flag to indicate if the task is removed.
+        MonoClock::time_point sch_time;     // Scheduled time
     };
 
     class InTask : public Task {
@@ -411,7 +412,6 @@ namespace Cppsched {
         InterruptableSleep sleeper;
 
         std::multimap<MonoClock::time_point, std::shared_ptr<Task>> tasks;
-        std::multimap<MonoClock::time_point, std::shared_ptr<Task>> completed_interval_tasks;
         std::map<std::string, std::shared_ptr<Task>> tasks_map;
         std::mutex lock;
         std::unique_ptr<ThreadPool> threads;
@@ -477,13 +477,9 @@ namespace Cppsched {
               if (task->interval) {
                 // if it's an interval task, only add the task back after f() is completed
                 if (task->enabled && ! task->removed) {
-                  // Temporarily save task until completed
-                  auto inserted_task = completed_interval_tasks.insert(*i);
-
                   // Run
-                  threads->push([this, task, inserted_task](int) {
+                  threads->push([this, task](int) {
                       task->f();
-                      completed_interval_tasks.erase(inserted_task);
                       // Check removed AFTER executing, before re-scheduling
                       if (task->removed) {
                           return;
