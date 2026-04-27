@@ -75,9 +75,9 @@ namespace Cppsched {
         std::string time_str;               // String representation of the time trigger
         std::function<void()> f;
 
-        bool recur;
-        bool interval;
-        bool enabled;                       // Flag to indicate if the task is enabled
+        const bool recur;
+        const bool interval;
+        std::atomic<bool> enabled {true};   // Flag to indicate if the task is enabled
         std::atomic<bool> removed {false};  // Flag to indicate if the task is removed.
         MonoClock::time_point sch_time;     // Scheduled time
     };
@@ -269,7 +269,12 @@ namespace Cppsched {
         void at(const std::string &task_id, const std::string &time, _Callable &&f, _Args &&... args) {
           // get current time as a tm object
           auto time_now = WallClock::to_time_t(WallClock::now());
-          std::tm tm = *std::localtime(&time_now);
+          std::tm tm{};
+#if defined(_WIN32)
+          localtime_s(&tm, &time_now);  // Windows (thread-safe)
+#else
+          localtime_r(&time_now, &tm);  // POSIX (thread-safe)
+#endif
 
           // our final time as a time_point
           WallClock::time_point tp;
@@ -418,6 +423,8 @@ namespace Cppsched {
 
         void add_task(const MonoClock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
+          if (t->removed) return;  // Guard against remove_task() firing between the
+                                   // removed check in the lambda and this call.
           const std::string &task_id {t->id};
           t->set_sch_time(time);
           tasks.emplace(time, t);
@@ -480,18 +487,20 @@ namespace Cppsched {
                   // Run
                   threads->push([this, task](int) {
                       task->f();
-                      // Check removed AFTER executing, before re-scheduling
+                      // Re-check removed after executing. Even though we checked before
+                      // pushing, remove_task() could have fired while f() was running.
+                      // The guard inside add_task() provides the final safety net under lock.
                       if (task->removed) {
                           return;
                       }
-                      // no risk of race-condition,
-                      // add_task() will wait for manage_tasks() to release lock
                       add_task(task->get_new_time(), task);
                       });
-                } else {
-                  // When removed or disabled, still add to recurred but check removed before re-adding
-                  recurred_tasks.emplace(task->get_new_time(), std::move(task));
+                } else if (!task->removed) {
+                  // Task is disabled but not removed: re-schedule it so it remains
+                  // in the queue and can be re-enabled later. Do not execute f().
+                  recurred_tasks.emplace(task->get_new_time(), task);
                 }
+                // If removed: drop silently, do not re-queue.
               } else {
                 if (task->enabled && ! task->removed) {
                   threads->push([task](int) {
@@ -536,10 +545,10 @@ namespace Cppsched {
           }
         }
 
-        template <typename Duration>
+        template <typename ClockDuration>
         std::string format_time_point(
             const std::string& fmt,
-            const std::chrono::time_point<std::chrono::system_clock, Duration>& tp) const
+            const std::chrono::time_point<std::chrono::system_clock, ClockDuration>& tp) const
         {
           auto tp_casted =
               std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
@@ -570,7 +579,7 @@ namespace Cppsched {
           return oss.str();
         }
 
-        inline std::string format_duration(std::chrono::nanoseconds timeunit) const
+        std::string format_duration(std::chrono::nanoseconds timeunit) const
         {
           std::chrono::nanoseconds ns =
             std::chrono::duration_cast<std::chrono::nanoseconds>(timeunit);
