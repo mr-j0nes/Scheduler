@@ -418,6 +418,8 @@ namespace Cppsched {
 
         void add_task(const MonoClock::time_point time, std::shared_ptr<Task> t) {
           std::lock_guard<std::mutex> l(lock);
+          if (t->removed) return;  // Guard against remove_task() firing between the
+                                   // removed check in the lambda and this call.
           const std::string &task_id {t->id};
           t->set_sch_time(time);
           tasks.emplace(time, t);
