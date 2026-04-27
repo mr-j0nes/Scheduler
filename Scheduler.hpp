@@ -75,9 +75,9 @@ namespace Cppsched {
         std::string time_str;               // String representation of the time trigger
         std::function<void()> f;
 
-        bool recur;
-        bool interval;
-        bool enabled;                       // Flag to indicate if the task is enabled
+        const bool recur;
+        const bool interval;
+        std::atomic<bool> enabled {true};   // Flag to indicate if the task is enabled
         std::atomic<bool> removed {false};  // Flag to indicate if the task is removed.
         MonoClock::time_point sch_time;     // Scheduled time
     };
