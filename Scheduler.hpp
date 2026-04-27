@@ -482,18 +482,20 @@ namespace Cppsched {
                   // Run
                   threads->push([this, task](int) {
                       task->f();
-                      // Check removed AFTER executing, before re-scheduling
+                      // Re-check removed after executing. Even though we checked before
+                      // pushing, remove_task() could have fired while f() was running.
+                      // The guard inside add_task() provides the final safety net under lock.
                       if (task->removed) {
                           return;
                       }
-                      // no risk of race-condition,
-                      // add_task() will wait for manage_tasks() to release lock
                       add_task(task->get_new_time(), task);
                       });
-                } else {
-                  // When removed or disabled, still add to recurred but check removed before re-adding
-                  recurred_tasks.emplace(task->get_new_time(), std::move(task));
+                } else if (!task->removed) {
+                  // Task is disabled but not removed: re-schedule it so it remains
+                  // in the queue and can be re-enabled later. Do not execute f().
+                  recurred_tasks.emplace(task->get_new_time(), task);
                 }
+                // If removed: drop silently, do not re-queue.
               } else {
                 if (task->enabled && ! task->removed) {
                   threads->push([task](int) {
