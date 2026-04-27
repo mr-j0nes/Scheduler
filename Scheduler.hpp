@@ -545,10 +545,10 @@ namespace Cppsched {
           }
         }
 
-        template <typename Duration>
+        template <typename ClockDuration>
         std::string format_time_point(
             const std::string& fmt,
-            const std::chrono::time_point<std::chrono::system_clock, Duration>& tp) const
+            const std::chrono::time_point<std::chrono::system_clock, ClockDuration>& tp) const
         {
           auto tp_casted =
               std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
