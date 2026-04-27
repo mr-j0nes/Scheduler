@@ -579,7 +579,7 @@ namespace Cppsched {
           return oss.str();
         }
 
-        inline std::string format_duration(std::chrono::nanoseconds timeunit) const
+        std::string format_duration(std::chrono::nanoseconds timeunit) const
         {
           std::chrono::nanoseconds ns =
             std::chrono::duration_cast<std::chrono::nanoseconds>(timeunit);
