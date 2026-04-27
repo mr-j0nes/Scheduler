@@ -269,7 +269,12 @@ namespace Cppsched {
         void at(const std::string &task_id, const std::string &time, _Callable &&f, _Args &&... args) {
           // get current time as a tm object
           auto time_now = WallClock::to_time_t(WallClock::now());
-          std::tm tm = *std::localtime(&time_now);
+          std::tm tm{};
+#if defined(_WIN32)
+          localtime_s(&tm, &time_now);  // Windows (thread-safe)
+#else
+          localtime_r(&time_now, &tm);  // POSIX (thread-safe)
+#endif
 
           // our final time as a time_point
           WallClock::time_point tp;
